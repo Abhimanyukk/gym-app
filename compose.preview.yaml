@@ -1,0 +1,16 @@
+services:
+  preview:
+    image: gym-app-dev
+    build: .
+    container_name: gym-app-preview
+    init: true
+    working_dir: /workspace/tablet
+    volumes:
+      - .:/workspace
+      - preview-pub-cache:/root/.pub-cache
+    ports:
+      - "127.0.0.1:8080:8080"
+    command: ["python3", "-u", "/workspace/tools/web_preview.py"]
+
+volumes:
+  preview-pub-cache:

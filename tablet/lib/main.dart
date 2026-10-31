@@ -3,12 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 
+import 'dashboard_screen.dart';
+
 void main() {
   runApp(const GymManagementApp());
 }
 
 class GymManagementApp extends StatelessWidget {
-  const GymManagementApp({super.key});
+  const GymManagementApp({super.key, this.home = const SplashScreen()});
+
+  final Widget home;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +26,7 @@ class GymManagementApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const SplashScreen(),
+      home: home,
     );
   }
 }
@@ -50,10 +54,7 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 1000),
     );
     _dumbbellScale = Tween<double>(begin: 3, end: 1).animate(
-      CurvedAnimation(
-        parent: _dumbbellController,
-        curve: Curves.easeOutCubic,
-      ),
+      CurvedAnimation(parent: _dumbbellController, curve: Curves.easeOutCubic),
     );
     _dumbbellController.forward();
   }
@@ -86,10 +87,16 @@ class _SplashScreenState extends State<SplashScreen>
         persistAcrossBackgrounding: true,
       );
       if (!mounted) return;
+      if (authenticated) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(
+            builder: (context) => const DashboardScreen(),
+          ),
+        );
+        return;
+      }
       setState(() {
-        _authenticationMessage = authenticated
-            ? 'Device verified. Staff authorization is not connected yet.'
-            : 'Authentication was not completed.';
+        _authenticationMessage = 'Authentication was not completed.';
       });
     } on LocalAuthException catch (exception) {
       if (!mounted) return;
@@ -101,8 +108,7 @@ class _SplashScreenState extends State<SplashScreen>
             'No biometrics are enrolled. Use the tablet PIN if available.',
           LocalAuthExceptionCode.userCanceled => 'Authentication canceled.',
           LocalAuthExceptionCode.temporaryLockout ||
-          LocalAuthExceptionCode.biometricLockout =>
-            'Authentication is temporarily locked. Unlock the tablet and try again.',
+          LocalAuthExceptionCode.biometricLockout => 'Authentication is temporarily locked. Unlock the tablet and try again.',
           _ => 'Device authentication could not be completed. Try again.',
         };
       });
@@ -120,10 +126,7 @@ class _SplashScreenState extends State<SplashScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset(
-            'assets/images/Splash.png',
-            fit: BoxFit.cover,
-          ),
+          Image.asset('assets/images/Splash.png', fit: BoxFit.cover),
           const DecoratedBox(
             key: ValueKey('splash-gradient'),
             decoration: BoxDecoration(
@@ -139,10 +142,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 32,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 440),
                 child: SizedBox(

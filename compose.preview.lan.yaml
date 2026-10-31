@@ -1,0 +1,5 @@
+# Optional trusted-LAN access; the base file keeps localhost available.
+services:
+  preview:
+    ports:
+      - "${PREVIEW_LAN_IP:?Set PREVIEW_LAN_IP to your PC Wi-Fi IPv4 address}:8080:8080"
