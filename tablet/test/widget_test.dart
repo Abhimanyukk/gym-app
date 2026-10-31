@@ -11,11 +11,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/main.dart';
 
 void main() {
-  testWidgets('shows an empty home screen', (WidgetTester tester) async {
+  testWidgets('temporary button responds to a tap', (WidgetTester tester) async {
     await tester.pumpWidget(const GymManagementApp());
 
     expect(find.byType(Scaffold), findsOneWidget);
     expect(find.byType(AppBar), findsNothing);
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Temporary Button'), findsOneWidget);
+
+    await tester.tap(find.text('Temporary Button'));
+    await tester.pump();
+
+    expect(find.text('Temporary button tapped'), findsOneWidget);
   });
 }

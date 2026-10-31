@@ -19,7 +19,20 @@ class GymManagementApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const Scaffold(),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Center(
+            child: FilledButton(
+              onPressed: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Temporary button tapped')),
+                );
+              },
+              child: const Text('Temporary Button'),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
