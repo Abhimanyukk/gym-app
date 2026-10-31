@@ -1,0 +1,333 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+class DashboardOverview extends StatelessWidget {
+  const DashboardOverview({super.key, this.showSampleData = false});
+
+  final bool showSampleData;
+
+  // dover-gain-efficient: reference data is only enabled by the debug preview;
+  // do not invent live totals, attendance, staff identity, or revenue calculations.
+  static const _metrics = [
+    (title: 'Total Members', value: '178'),
+    (title: 'Present Today', value: '30'),
+    (title: 'Active Plans', value: '3'),
+    (title: 'Revenue (Today)', value: '\$12,346'),
+  ];
+  static const _checkIns = [
+    (
+      name: 'Poovalli Induchoodan',
+      time: '08:12 AM',
+      status: 'Expires in 12 days',
+      color: Color(0xFF9B6500),
+    ),
+    (
+      name: 'Bilal John Kurishingal',
+      time: '08:04 AM',
+      status: 'Active',
+      color: Color(0xFF08752B),
+    ),
+    (
+      name: 'Nadeshan',
+      time: '07:46 AM',
+      status: 'Due for 2 days',
+      color: Color(0xFF830D11),
+    ),
+    (
+      name: 'Pulikkattil Charlie',
+      time: '07:46 AM',
+      status: 'Expires tomorrow',
+      color: Color(0xFF9B6500),
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final readableWidth =
+            constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+        final columns = readableWidth >= 760
+            ? 4
+            : readableWidth >= 360
+            ? 2
+            : 1;
+        final cardWidth = (constraints.maxWidth - 20 * (columns - 1)) / columns;
+
+        return Column(
+          key: const ValueKey('dashboard-overview'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _DashboardHeader(showSampleData: showSampleData),
+            const SizedBox(height: 28),
+            Wrap(
+              spacing: 20,
+              runSpacing: 20,
+              children: [
+                for (final metric in _metrics)
+                  SizedBox(
+                    width: cardWidth,
+                    child: DecoratedBox(
+                      key: ValueKey('summary-${metric.title}'),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F0F0),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              metric.title,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              showSampleData ? metric.value : '—',
+                              style: theme.textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 28),
+            Container(
+              key: const ValueKey('recent-check-ins'),
+              constraints: const BoxConstraints(minHeight: 360),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: const Color(0xFFDDDDDD)),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Recent Check-ins',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (showSampleData)
+                    for (var index = 0; index < _checkIns.length; index++) ...[
+                      if (index > 0)
+                        const Divider(height: 1, color: Color(0xFFDDDDDD)),
+                      _CheckInRow(
+                        name: _checkIns[index].name,
+                        time: _checkIns[index].time,
+                        status: _checkIns[index].status,
+                        statusColor: _checkIns[index].color,
+                        compact: readableWidth < 640,
+                      ),
+                    ]
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 32),
+                      child: Text(
+                        'Check-ins will appear here once attendance is connected.',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              showSampleData
+                  ? 'Sample data · Backend and staff authorization are not connected.'
+                  : 'Backend and staff authorization are not connected. Totals are unavailable.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _DashboardHeader extends StatefulWidget {
+  const _DashboardHeader({required this.showSampleData});
+
+  final bool showSampleData;
+
+  @override
+  State<_DashboardHeader> createState() => _DashboardHeaderState();
+}
+
+class _DashboardHeaderState extends State<_DashboardHeader> {
+  late final Timer _clock;
+
+  @override
+  void initState() {
+    super.initState();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _clock.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Asia/Kolkata has a fixed UTC+05:30 offset; ignore the preview host's timezone.
+    final now = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
+    final period = now.hour < 12
+        ? 'Morning'
+        : now.hour < 17
+        ? 'Afternoon'
+        : 'Evening';
+    final theme = Theme.of(context);
+    final localizations = MaterialLocalizations.of(context);
+    final greeting = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Good $period${widget.showSampleData ? ', Admin' : ''}',
+          key: const ValueKey('dashboard-greeting'),
+          style: theme.textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Welcome to RepLab Fitness',
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+    final clock = Text(
+      '${localizations.formatMediumDate(now)} ${now.year}   '
+      '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(now))} IST',
+      key: const ValueKey('dashboard-clock'),
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final readableWidth =
+            constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
+        if (readableWidth < 760) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [greeting, const SizedBox(height: 16), clock],
+          );
+        }
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: greeting),
+            const SizedBox(width: 24),
+            clock,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _CheckInRow extends StatelessWidget {
+  const _CheckInRow({
+    required this.name,
+    required this.time,
+    required this.status,
+    required this.statusColor,
+    required this.compact,
+  });
+
+  final String name;
+  final String time;
+  final String status;
+  final Color statusColor;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final member = Row(
+      children: [
+        const CircleAvatar(radius: 20, backgroundColor: Color(0xFF2D9CBE)),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Text(
+            name,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+    final checkInTime = Text(
+      time,
+      style: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      decoration: BoxDecoration(
+        color: statusColor,
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: Text(
+        status,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: compact
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                member,
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 20,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [checkInTime, badge],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: member),
+                const SizedBox(width: 24),
+                checkInTime,
+                const SizedBox(width: 20),
+                badge,
+              ],
+            ),
+    );
+  }
+}

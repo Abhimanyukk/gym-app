@@ -140,104 +140,111 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
           ),
-          Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ScaleTransition(
-                        key: const ValueKey('dumbbell-scale'),
-                        scale: _dumbbellScale,
-                        child: SvgPicture.asset(
-                          'assets/icons/dumbell.svg',
-                          width: 109,
-                          height: 109,
-                        ),
-                      ),
-                      AnimatedBuilder(
-                        animation: _dumbbellScale,
-                        builder: (context, child) => SizedBox(
-                          height: 20 + 44 * (_dumbbellScale.value - 1),
-                        ),
-                      ),
-                      const Text(
-                        'RepLab Fitness',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Management & Attendance System',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      DecoratedBox(
-                        key: const ValueKey('login-panel'),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.lock_outline_rounded,
-                                size: 44,
-                                color: Color(0xFF286455),
-                              ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Use your tablet PIN or biometrics to continue.',
-                                textAlign: TextAlign.center,
-                                style: Theme.of(context).textTheme.bodyLarge,
-                              ),
-                              const SizedBox(height: 24),
-                              SizedBox(
-                                width: double.infinity,
-                                height: 54,
-                                child: FilledButton(
-                                  onPressed: _isAuthenticating
-                                      ? null
-                                      : _authenticateWithDeviceSecurity,
-                                  child: _isAuthenticating
-                                      ? const SizedBox.square(
-                                          dimension: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                          ),
-                                        )
-                                      : const Text('Login'),
-                                ),
-                              ),
-                              if (_authenticationMessage != null) ...[
-                                const SizedBox(height: 16),
-                                Text(
-                                  _authenticationMessage!,
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ],
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 32,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ScaleTransition(
+                          key: const ValueKey('dumbbell-scale'),
+                          scale: _dumbbellScale,
+                          child: SvgPicture.asset(
+                            'assets/icons/dumbell.svg',
+                            width: 109,
+                            height: 109,
                           ),
                         ),
-                      ),
-                    ],
+                        AnimatedBuilder(
+                          animation: _dumbbellScale,
+                          builder: (context, child) => SizedBox(
+                            height: 20 + 44 * (_dumbbellScale.value - 1),
+                          ),
+                        ),
+                        const Text(
+                          'RepLab Fitness',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Management & Attendance System',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        DecoratedBox(
+                          key: const ValueKey('login-panel'),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.lock_outline_rounded,
+                                  size: 44,
+                                  color: Color(0xFF286455),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Use your tablet PIN or biometrics to continue.',
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodyLarge,
+                                ),
+                                const SizedBox(height: 24),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 54,
+                                  child: FilledButton(
+                                    onPressed: _isAuthenticating
+                                        ? null
+                                        : _authenticateWithDeviceSecurity,
+                                    child: _isAuthenticating
+                                        ? const SizedBox.square(
+                                            dimension: 22,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Text('Login'),
+                                  ),
+                                ),
+                                if (_authenticationMessage != null) ...[
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _authenticationMessage!,
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

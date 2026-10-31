@@ -40,6 +40,13 @@ The debug-only `tablet/lib/preview.dart` opens the dashboard with the
 same application theme. Android continues to use `lib/main.dart` and
 requires device authentication.
 
+The dashboard contains the greeting, a live gym-local clock (IST), four
+summary cards, and recent check-ins with membership status badges. Only
+the debug preview enables the clearly labelled reference sample data.
+The normal app shows unavailable totals and an attendance-not-connected
+message until the backend is integrated; it does not report invented
+member counts or revenue.
+
 Dart files under `tablet/lib/` and files under `tablet/assets/` are
 watched automatically, including edits made by external tools. After
 an edit settles, Flutter hot-restarts the browser preview. Navigation
@@ -115,6 +122,14 @@ docker compose exec dev bash -lc 'cd tablet && flutter build apk --release'
 The APK is written to
 `tablet/build/app/outputs/flutter-apk/app-release.apk`. The web target is
 for local preview; Android remains the deployment target.
+
+The Android activity uses native immersive fullscreen: backgrounds fill
+the display, while login and dashboard controls respect screen cutouts.
+Fullscreen is restored when the app regains focus after authentication
+or backgrounding. System bars can be temporarily revealed with an edge
+swipe. The browser preview does not request fullscreen. Verify this on
+the tablet after installing a newly built APK; Dart hot restart cannot
+apply changes to the native Android activity.
 
 ## Database
 

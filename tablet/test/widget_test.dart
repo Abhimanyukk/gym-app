@@ -109,7 +109,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('section-body')),
-        matching: find.text('Dashboard'),
+        matching: find.text('Welcome to RepLab Fitness'),
       ),
       findsOneWidget,
     );
@@ -186,15 +186,21 @@ void main() {
         sidebarPosition.dx + 72,
       );
     }
-    expect(find.text('Dashboard overview will appear here.'), findsOneWidget);
+    expect(find.text('Welcome to RepLab Fitness'), findsOneWidget);
+    expect(find.text('178'), findsNothing);
+    expect(find.text('—'), findsNWidgets(4));
+    expect(
+      find.text('Check-ins will appear here once attendance is connected.'),
+      findsOneWidget,
+    );
 
     const sections = [
       ('Attendance', 'Attendance records will appear here.'),
       ('Members', 'Member management will appear here.'),
       ('Settings', 'App settings will appear here.'),
-      ('Dashboard', 'Dashboard overview will appear here.'),
+      ('Dashboard', 'Welcome to RepLab Fitness'),
     ];
-    var previousMessage = 'Dashboard overview will appear here.';
+    var previousMessage = 'Welcome to RepLab Fitness';
 
     for (final (title, message) in sections) {
       final destination = find.byKey(ValueKey('nav-$title'));
@@ -221,7 +227,10 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.descendant(of: body, matching: find.text(title)),
+        find.descendant(
+          of: body,
+          matching: find.text(title == 'Dashboard' ? message : title),
+        ),
         findsOneWidget,
       );
       expect(find.text(message), findsOneWidget);
@@ -350,4 +359,159 @@ void main() {
     expect(tester.getTopLeft(logo), logoPosition);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'backgrounds fill the display while controls avoid screen insets',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      const insets = EdgeInsets.fromLTRB(32, 24, 20, 28);
+      const screenData = MediaQueryData(padding: insets, viewPadding: insets);
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MediaQuery(data: screenData, child: DashboardScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final sidebar = find.byKey(const ValueKey('sidebar'));
+      final body = find.byKey(const ValueKey('section-body'));
+      expect(tester.getRect(sidebar), const Rect.fromLTWH(0, 0, 256, 800));
+      expect(tester.getRect(body), const Rect.fromLTWH(256, 0, 944, 800));
+      expect(
+        tester.getTopLeft(find.byKey(const ValueKey('sidebar-logo'))),
+        const Offset(56, 48),
+      );
+      for (final title in ['Dashboard', 'Attendance', 'Members', 'Settings']) {
+        expect(
+          tester
+              .getTopLeft(
+                find.descendant(of: sidebar, matching: find.text(title)),
+              )
+              .dx,
+          32 + 72,
+        );
+      }
+      final contentScroll = find.descendant(
+        of: body,
+        matching: find.byType(SingleChildScrollView),
+      );
+      expect(tester.getTopLeft(contentScroll), const Offset(256, 24));
+      expect(tester.getSize(contentScroll).width, 944 - 20);
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: MediaQuery(data: screenData, child: SplashScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const ValueKey('splash-gradient'))),
+        const Rect.fromLTWH(0, 0, 1200, 800),
+      );
+      final safeContent = find
+          .descendant(of: find.byType(SafeArea), matching: find.byType(Center))
+          .first;
+      expect(
+        tester.getRect(safeContent),
+        const Rect.fromLTWH(32, 24, 1148, 748),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'dashboard preview shows reference contents and adapts to width',
+    (tester) async {
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      const summaries = [
+        'Total Members',
+        'Present Today',
+        'Active Plans',
+        'Revenue (Today)',
+      ];
+
+      for (final (size, scale, columns) in const [
+        (Size(1600, 1000), 1.0, 4),
+        (Size(1024, 768), 1.0, 2),
+        (Size(800, 600), 2.0, 1),
+        (Size(360, 740), 1.0, 1),
+      ]) {
+        await tester.binding.setSurfaceSize(size);
+        await tester.pumpWidget(
+          GymManagementApp(
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: const DashboardScreen(showSampleData: true),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Welcome to RepLab Fitness'), findsOneWidget);
+        expect(find.textContaining('Sample data'), findsOneWidget);
+        expect(
+          tester
+              .widget<Text>(find.byKey(const ValueKey('dashboard-greeting')))
+              .data,
+          matches(r'^Good (Morning|Afternoon|Evening), Admin$'),
+        );
+        final clock = tester.widget<Text>(
+          find.byKey(const ValueKey('dashboard-clock')),
+        );
+        final today = DateTime.now().toUtc().add(
+          const Duration(hours: 5, minutes: 30),
+        );
+        expect(clock.data, contains('${today.year}'));
+        expect(clock.data, endsWith('IST'));
+        for (final value in ['178', '30', '3', '\$12,346']) {
+          expect(find.text(value), findsOneWidget);
+        }
+        for (final text in [
+          'Recent Check-ins',
+          'Poovalli Induchoodan',
+          'Bilal John Kurishingal',
+          'Nadeshan',
+          'Pulikkattil Charlie',
+          '08:12 AM',
+          '08:04 AM',
+          'Expires in 12 days',
+          'Active',
+          'Due for 2 days',
+          'Expires tomorrow',
+        ]) {
+          expect(find.text(text), findsOneWidget);
+        }
+        expect(find.text('07:46 AM'), findsNWidgets(2));
+        final cards = [
+          for (final title in summaries)
+            tester.getRect(find.byKey(ValueKey('summary-$title'))),
+        ];
+        for (var index = 1; index < cards.length; index++) {
+          expect(cards[index].width, closeTo(cards.first.width, 0.01));
+          if (index < columns) {
+            expect(cards[index].top, cards.first.top);
+          } else {
+            expect(cards[index].top, greaterThan(cards.first.top));
+          }
+        }
+        expect(tester.takeException(), isNull);
+
+        // Leaving Dashboard disposes its clock.
+        await tester.drag(
+          find.byKey(const ValueKey('sidebar-navigation')),
+          const Offset(0, -300),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('nav-Settings')));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.byKey(const ValueKey('dashboard-overview')), findsNothing);
+        expect(find.text('App settings will appear here.'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      }
+    },
+  );
 }

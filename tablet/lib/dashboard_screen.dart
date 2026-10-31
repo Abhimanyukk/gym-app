@@ -1,9 +1,14 @@
 /*  */
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'dashboard_overview.dart';
+
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.showSampleData = false});
+
+  final bool showSampleData;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -12,11 +17,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   static const _sidebarHighlight = Color.fromRGBO(228, 226, 226, 0.2);
   static const _sections = [
-    (
-      title: 'Dashboard',
-      icon: 'assets/icons/dashboard.svg',
-      message: 'Dashboard overview will appear here.',
-    ),
+    (title: 'Dashboard', icon: 'assets/icons/dashboard.svg', message: ''),
     (
       title: 'Attendance',
       icon: 'assets/icons/attendance.svg',
@@ -41,20 +42,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final section = _sections[_selectedIndex];
 
     return Scaffold(
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final extended = constraints.maxWidth >= 800;
-            final sidebarWidth = extended ? 256.0 : 80.0;
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          final extended = constraints.maxWidth >= 800;
+          final sidebarWidth = extended ? 256.0 : 80.0;
 
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  width: sidebarWidth,
-                  child: Material(
-                    key: const ValueKey('sidebar'),
-                    color: const Color(0xFF140101),
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: sidebarWidth,
+                child: Material(
+                  key: const ValueKey('sidebar'),
+                  color: const Color(0xFF140101),
+                  child: SafeArea(
+                    right: false,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -146,37 +148,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                 ),
-                Expanded(
-                  key: const ValueKey('section-body'),
+              ),
+              Expanded(
+                key: const ValueKey('section-body'),
+                child: SafeArea(
+                  left: false,
                   child: SingleChildScrollView(
                     key: PageStorageKey(section.title),
                     padding: const EdgeInsets.all(32),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          section.title,
-                          style: Theme.of(context).textTheme.headlineMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          section.message,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                        const SizedBox(height: 24),
-                        // dover-gain-efficient: these are UI placeholders, not staff-authorized backend screens.
-                        Text(
-                          'Staff authorization is not connected yet.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ],
-                    ),
+                    child: _selectedIndex == 0
+                        ? DashboardOverview(
+                            showSampleData: kDebugMode && widget.showSampleData,
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                section.title,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineMedium,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                section.message,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                              const SizedBox(height: 24),
+                              // dover-gain-efficient: these are UI placeholders, not staff-authorized backend screens.
+                              Text(
+                                'Staff authorization is not connected yet.',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ],
+                          ),
                   ),
                 ),
-              ],
-            );
-          },
-        ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
