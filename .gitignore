@@ -1,0 +1,6 @@
+.env
+.dart_tool/
+.venv/
+__pycache__/
+build/
+*.py[cod]

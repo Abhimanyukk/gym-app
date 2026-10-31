@@ -1,0 +1,25 @@
+{
+    "name": "Gym Management Development",
+    "dockerComposeFile": "../compose.yaml",
+    "service": "dev",
+    "runServices": [
+        "dev",
+        "db"
+    ],
+    "workspaceFolder": "/workspace",
+    "shutdownAction": "stopCompose",
+    "forwardPorts": [
+        8000,
+        8080
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "Dart-Code.flutter",
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    }
+}

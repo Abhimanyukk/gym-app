@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+sqlalchemy>=2,<3
+alembic
+psycopg[binary]
+pydantic-settings
+pytest
