@@ -37,6 +37,49 @@ void main() {
   );
 
   test(
+    'login, resume and server changes use browser-safe expiry timers',
+    () async {
+      final delays = <Duration>[];
+      final checkpoints = <void Function()>[];
+      await runZoned(
+        () async {
+          final fixture = ApiFixture();
+          final api = RepLabApi(client: fixture.client);
+          final restored = RepLabApi(client: fixture.client);
+          final changed = RepLabApi(client: fixture.client);
+          addTearDown(() {
+            api.dispose();
+            restored.dispose();
+            changed.dispose();
+          });
+          await api.login('https://localhost:8443', 'synthetic');
+          await restored.resume(api.baseUrl, api.sessionKey!);
+          changed.adoptSession(api);
+          expect(
+            delays.every((delay) => delay <= const Duration(days: 1)),
+            isTrue,
+            reason: 'Long browser timers can overflow and fire immediately.',
+          );
+          expect(checkpoints, hasLength(3));
+          checkpoints.first(); // A checkpoint is not the actual expiry.
+          expect(checkpoints, hasLength(4));
+          expect(api.signedIn, isTrue);
+          expect(restored.signedIn, isTrue);
+          expect(changed.signedIn, isTrue);
+          expect(api.sessionMessage, isNull);
+        },
+        zoneSpecification: ZoneSpecification(
+          createTimer: (self, parent, zone, delay, callback) {
+            delays.add(delay);
+            if (delay >= const Duration(days: 1)) checkpoints.add(callback);
+            return parent.createTimer(zone, delay, callback);
+          },
+        ),
+      );
+    },
+  );
+
+  test(
     'real contract serialization, auth, query encoding and session revocation',
     () async {
       final fixture = ApiFixture();

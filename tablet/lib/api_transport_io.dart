@@ -5,7 +5,10 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 Future<http.Client> createApiClient() async {
-  const asset = String.fromEnvironment('API_CERT_ASSET');
+  const asset = String.fromEnvironment(
+    'API_CERT_ASSET',
+    defaultValue: 'assets/certificates/server.crt',
+  );
   final context = SecurityContext(withTrustedRoots: true);
   if (asset.isNotEmpty) {
     final bytes = await rootBundle.load(asset);

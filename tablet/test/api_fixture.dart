@@ -32,6 +32,7 @@ class ApiFixture {
   bool expired = false;
   bool failWrites = false;
   bool failReads = false;
+  Future<void>? readBarrier;
   Future<void>? writeBarrier;
   Future<void>? loginBarrier;
   Map<String, dynamic> settings = {
@@ -75,6 +76,9 @@ class ApiFixture {
     final body = request.body.isEmpty
         ? <String, dynamic>{}
         : jsonDecode(request.body) as Map<String, dynamic>;
+    if (request.method == 'GET' && readBarrier != null) {
+      await readBarrier;
+    }
     if (path == '/api/v1/auth/login') {
       if (loginBarrier != null) await loginBarrier;
       if (!allowLogin) {

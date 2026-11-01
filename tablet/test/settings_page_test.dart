@@ -35,6 +35,127 @@ Future<void> enterSetting(WidgetTester tester, String key, String value) async {
 }
 
 void main() {
+  testWidgets('settings shows amber warnings only, not a Connected ribbon', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1024, 768));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = ApiFixture();
+    final api = RepLabApi(client: fixture.client);
+    await api.login('https://localhost:8443', 'synthetic');
+    await tester.pumpWidget(GymManagementApp(home: DashboardScreen(api: api)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('nav-Settings')));
+    await tester.pumpAndSettle();
+    final notice = find.byKey(const ValueKey('settings-notice'));
+    expect(notice, findsNothing);
+    expect(
+      find.textContaining('Connected · Single-administrator'),
+      findsNothing,
+    );
+    fixture.failReads = true;
+    await tester.drag(
+      find.byKey(const PageStorageKey('settings-scroll')),
+      const Offset(0, 500),
+    );
+    await tester.pumpAndSettle();
+    expect(notice, findsOneWidget);
+    expect(
+      find.descendant(
+        of: notice,
+        matching: find.byIcon(Icons.warning_amber_rounded),
+      ),
+      findsOneWidget,
+    );
+    final warning = tester.widget<Container>(
+      find.descendant(of: notice, matching: find.byType(Container)).first,
+    );
+    expect((warning.decoration as BoxDecoration).color, Colors.amber.shade50);
+    expect(find.textContaining('Cannot reach the server'), findsOneWidget);
+    fixture.failReads = false;
+    await tester.tap(find.text('Retry settings'));
+    await tester.pumpAndSettle();
+    expect(notice, findsNothing);
+    api.clearSession();
+    await tester.pumpWidget(const SizedBox.shrink());
+    api.dispose();
+    await openSettings(tester, preview: false);
+    expect(
+      find.descendant(
+        of: notice,
+        matching: find.byIcon(Icons.warning_amber_rounded),
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Backend not connected'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+    'advanced settings survives navigation with independent scroll and expansion state',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1024, 768));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await openSettings(tester);
+      final scroll = find.byKey(const PageStorageKey('settings-scroll'));
+      final title = find.byKey(const ValueKey('settings-title'));
+      final titleRect = tester.getRect(title);
+      ScrollPosition position() => tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: scroll, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      Future<void> revisit(String section) async {
+        final offset = position().pixels;
+        expect(offset, greaterThan(0));
+        await tester.tap(find.byKey(ValueKey('nav-$section')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('nav-Settings')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ErrorWidget), findsNothing);
+        expect(find.byType(ExpansionTile), findsOneWidget);
+        expect(position().pixels, closeTo(offset, .01));
+        expect(tester.getRect(title), titleRect);
+      }
+
+      await tester.drag(scroll, const Offset(0, -300));
+      await tester.pumpAndSettle();
+      await revisit('Dashboard');
+      expect(
+        find.byKey(const ValueKey('settings-change-server')),
+        findsNothing,
+      );
+
+      await tapSetting(tester, 'settings-advanced');
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('settings-change-server')),
+      );
+      await tester.pumpAndSettle();
+      await revisit('Attendance');
+      expect(
+        find.byKey(const ValueKey('settings-change-server')),
+        findsOneWidget,
+      );
+      await tapSetting(tester, 'settings-change-server');
+      expect(find.byKey(const ValueKey('settings-dialog')), findsOneWidget);
+      await tapSetting(tester, 'settings-dialog-cancel');
+
+      await tapSetting(tester, 'settings-advanced');
+      await revisit('Members');
+      expect(
+        find.byKey(const ValueKey('settings-change-server')),
+        findsNothing,
+      );
+      await tapSetting(tester, 'settings-advanced');
+      expect(
+        find.byKey(const ValueKey('settings-change-server')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets(
     'server changes verify independently and preserve the old connection on failure',
     (tester) async {

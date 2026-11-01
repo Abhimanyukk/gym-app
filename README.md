@@ -67,16 +67,25 @@ The normal app loads real member counts from the Rust API. Attendance, plans
 and revenue remain unavailable because those backend features are not implemented;
 it does not invent totals or use preview records in an authenticated session.
 
-Pull down at the top of Dashboard's body, Attendance's check-in list, or the
-Members list to refresh, including empty and filtered lists. In the browser
-preview, click and drag down to try the same gesture. A rotating dumbbell
-in a green circle replaces the standard refresh spinner; the same shared loader
-is used during login and is the app's loading style. Reduced-motion settings
-keep the dumbbell stationary. Refresh retains the selected date, search, filters,
+Pull down at the top of Dashboard, Attendance, Members, or Settings to refresh,
+including empty and filtered lists. The gesture also works over headings,
+search/filter controls, summary cards and page padding; the sidebar never
+refreshes. The indicator appears at the same inset above every page,
+not inside the Attendance or Members list card. In the browser preview, click
+and drag down to try the same gesture. A deliberate pull reveals a bare dumbbell
+above the moving content, without a circle or shadow. It rotates
+after releasing a sufficiently long pull, disappears when the request finishes
+(including errors), and the content retracts. That single indicator also covers
+the pending server request; inline loaders are hidden while it is visible.
+Initial loads and normal retries still show their own loader. Touches and small drags never show
+the logo or refresh. The same shared loader is used during login and is the app's
+loading style. Reduced-motion settings keep the dumbbell stationary and skip
+retraction animation. Refresh retains the selected date, search, filters,
 and temporary member registrations; Attendance's downward swipe still reopens
 its overview. Debug preview refreshes briefly show the animation and rebuild
-local data only. Normal-app Dashboard and Members refreshes request server data.
-Attendance refresh checks readiness and explains that attendance endpoints
+local data only. Normal-app Dashboard and Members refreshes request server data;
+Settings reloads gym preferences without changing device connection or biometric
+preferences. Attendance refresh checks readiness and explains that attendance endpoints
 are not implemented.
 
 Attendance opens on today's gym-local date, with member numbers,
@@ -119,7 +128,9 @@ The authenticated app saves gym settings and changes passwords through the API.
 Password changes revoke all saved sessions; the one-admin constraint is enforced
 transactionally and in PostgreSQL, not just in the UI.
 The Settings title stays fixed while its body scrolls beneath it,
-matching the Attendance page header.
+matching the Attendance page header. A healthy connection has no status ribbon;
+connection failures and preview/offline warnings use an amber warning ribbon.
+Attendance's unavailable/preview ribbon uses the same warning icon and amber style.
 
 The left sidebar is fixed and does not scroll; only the page body scrolls.
 Short displays use compact 48px icon buttons so every destination stays

@@ -59,6 +59,11 @@ void main() {
       const next = 'synthetic changed integration password';
       await api.login(url, current);
       expect(api.admin?.name, 'Tablet Test Admin');
+      final remembered = RepLabApi();
+      addTearDown(remembered.dispose);
+      await remembered.resume(url, api.sessionKey!);
+      expect(remembered.signedIn, true);
+      expect(remembered.admin?.id, api.admin?.id);
       final before = await api.members();
       final saved = await api.addMember({
         'name': 'Synthetic tablet member',
@@ -90,6 +95,8 @@ void main() {
       );
       await api.changePassword(current, next);
       expect(api.signedIn, isFalse);
+      await expectLater(remembered.dashboard(), throwsA(isA<ApiException>()));
+      expect(remembered.signedIn, false);
       await api.login(url, next);
       await api.logout();
       expect(api.signedIn, isFalse);

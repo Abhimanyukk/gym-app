@@ -42,6 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Map<String, dynamic>? _summary;
   String? _error;
   bool _loading = false;
+  final _scroll = ScrollController();
   @override
   void initState() {
     super.initState();
@@ -62,6 +63,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   // Keep preview registrations when switching sidebar sections; never persist
@@ -211,29 +218,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: SafeArea(
                   left: false,
                   child: _selectedIndex != 0
-                      ? Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: switch (_selectedIndex) {
-                            1 => AttendancePage(
-                              api: widget.api,
-                              showSampleData:
-                                  kDebugMode && widget.showSampleData,
-                            ),
-                            2 => MembersPage(
-                              api: widget.api,
-                              members: _members,
-                              showSampleData:
-                                  kDebugMode && widget.showSampleData,
-                            ),
-                            _ => SettingsPage(
-                              preview: _settings,
-                              api: widget.api,
-                              device: widget.device,
-                            ),
-                          },
-                        )
+                      ? switch (_selectedIndex) {
+                          1 => AttendancePage(
+                            padding: const EdgeInsets.all(32),
+                            api: widget.api,
+                            showSampleData: kDebugMode && widget.showSampleData,
+                          ),
+                          2 => MembersPage(
+                            padding: const EdgeInsets.all(32),
+                            api: widget.api,
+                            members: _members,
+                            showSampleData: kDebugMode && widget.showSampleData,
+                          ),
+                          _ => SettingsPage(
+                            padding: const EdgeInsets.all(32),
+                            preview: _settings,
+                            api: widget.api,
+                            device: widget.device,
+                          ),
+                        }
                       : DumbbellRefresh(
                           key: const ValueKey('dashboard-refresh'),
+                          padding: const EdgeInsets.all(32),
+                          scrollController: _scroll,
                           onRefresh: widget.api != null
                               ? _refresh
                               : () => refreshLocalView(
@@ -243,10 +250,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                           child: SingleChildScrollView(
                             key: PageStorageKey(section.title),
+                            controller: _scroll,
                             physics: const AlwaysScrollableScrollPhysics(
                               parent: ClampingScrollPhysics(),
                             ),
-                            padding: const EdgeInsets.all(32),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [

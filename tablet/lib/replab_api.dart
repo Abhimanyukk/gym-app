@@ -99,9 +99,7 @@ class RepLabApi extends ChangeNotifier {
     _expiresAt = expires;
     admin = account;
     sessionMessage = null;
-    _expiry = Timer(expires.difference(DateTime.now().toUtc()), () {
-      clearSession('Your session expired. Please sign in again.');
-    });
+    _scheduleExpiry();
     if (notify) publishSession();
   }
 
@@ -123,11 +121,7 @@ class RepLabApi extends ChangeNotifier {
           code: 'unauthorized',
         );
       }
-      _expiry?.cancel();
-      _expiry = Timer(
-        expires.difference(DateTime.now().toUtc()),
-        () => clearSession('Session expired. Connect again.'),
-      );
+      _scheduleExpiry();
       sessionMessage = null;
       publishSession();
     } catch (_) {
@@ -157,13 +151,24 @@ class RepLabApi extends ChangeNotifier {
     _token = other._token;
     admin = other.admin;
     _expiresAt = other._expiresAt;
-    _expiry?.cancel();
-    _expiry = Timer(
-      _expiresAt!.difference(DateTime.now().toUtc()),
-      () => clearSession('Session expired. Connect again.'),
-    );
+    _scheduleExpiry();
     sessionMessage = null;
     publishSession();
+  }
+
+  void _scheduleExpiry() {
+    _expiry?.cancel();
+    final remaining = _expiresAt!.difference(DateTime.now().toUtc());
+    if (remaining <= Duration.zero) {
+      clearSession('Your session expired. Please sign in again.');
+      return;
+    }
+    // Browser timers overflow above ~24.8 days. Recheck long sessions daily.
+    const checkpoint = Duration(days: 1);
+    _expiry = Timer(
+      remaining > checkpoint ? checkpoint : remaining,
+      _scheduleExpiry,
+    );
   }
 
   static AdminAccount parseAdmin(Map<String, dynamic> value) => (

@@ -6,12 +6,19 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 import 'app_loading.dart';
 import 'sample_attendance.dart';
 import 'replab_api.dart';
+import 'warning_ribbon.dart';
 
 class AttendancePage extends StatefulWidget {
-  const AttendancePage({super.key, this.showSampleData = false, this.api});
+  const AttendancePage({
+    super.key,
+    this.showSampleData = false,
+    this.api,
+    this.padding = EdgeInsets.zero,
+  });
 
   final bool showSampleData;
   final RepLabApi? api;
+  final EdgeInsets padding;
 
   @override
   State<AttendancePage> createState() => _AttendancePageState();
@@ -111,6 +118,32 @@ class _AttendancePageState extends State<AttendancePage>
     }
   }
 
+  Future<void> _refresh() async {
+    if (widget.api == null) {
+      return refreshLocalView(
+        context,
+        preview: _isPreview,
+        rebuild: () => setState(() {}),
+      );
+    }
+    try {
+      await widget.api!.ready();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Server connected. Attendance endpoints are not implemented yet.',
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.message)));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -144,7 +177,7 @@ class _AttendancePageState extends State<AttendancePage>
         });
     final dateLabel = '${localizations.formatMediumDate(_date)} ${_date.year}';
 
-    return LayoutBuilder(
+    final layout = LayoutBuilder(
       builder: (context, constraints) {
         final readableWidth =
             constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
@@ -311,7 +344,7 @@ class _AttendancePageState extends State<AttendancePage>
             ),
         ];
 
-        return Column(
+        final page = Column(
           key: const ValueKey('attendance-page'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -351,38 +384,15 @@ class _AttendancePageState extends State<AttendancePage>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Container(
+                      WarningRibbon(
                         key: const ValueKey('attendance-info-ribbon'),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.primary.withValues(
-                            alpha: 0.07,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              Icons.info_outline_rounded,
-                              size: 20,
-                              color: theme.colorScheme.primary,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _isPreview
-                                    ? compactControls
-                                          ? 'Sample data · Not live attendance.'
-                                          : 'Sample data · Example visits, not live attendance. Today and yesterday are available to preview.'
-                                    : compactControls
-                                    ? 'Attendance is not connected yet.'
-                                    : 'Attendance is not connected yet. Check-ins will appear here once the backend and terminal are connected.',
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ),
-                          ],
-                        ),
+                        message: _isPreview
+                            ? compactControls
+                                  ? 'Sample data · Not live attendance.'
+                                  : 'Sample data · Example visits, not live attendance. Today and yesterday are available to preview.'
+                            : compactControls
+                            ? 'Attendance is not connected yet.'
+                            : 'Attendance is not connected yet. Check-ins will appear here once the backend and terminal are connected.',
                       ),
                       SizedBox(height: compactControls ? 12 : 24),
                       if (readableWidth >= 600)
@@ -430,9 +440,10 @@ class _AttendancePageState extends State<AttendancePage>
                     _showOverview(event.scrollDelta.dy < 0);
                   }
                 },
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onVerticalDragUpdate: (details) {
+                child: ScrollDragRegion(
+                  controller: _listScroll,
+                  onlyAtTop: true,
+                  onUpdate: (details) {
                     if (details.delta.dy != 0) {
                       _showOverview(details.delta.dy > 0);
                     }
@@ -599,142 +610,106 @@ class _AttendancePageState extends State<AttendancePage>
                             ),
                           ),
                         Expanded(
-                          child: DumbbellRefresh(
-                            key: const ValueKey('attendance-refresh'),
-                            onRefresh: widget.api != null
-                                ? () async {
-                                    try {
-                                      await widget.api!.ready();
-                                      if (!context.mounted) return;
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Server connected. Attendance endpoints are not implemented yet.',
-                                              ),
-                                            ),
-                                          );
-                                    } on ApiException catch (error) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                              SnackBar(
-                                                content: Text(error.message),
-                                              ),
-                                            );
-                                      }
-                                    }
-                                  }
-                                : () => refreshLocalView(
-                                    context,
-                                    preview: _isPreview,
-                                    rebuild: () => setState(() {}),
-                                  ),
-                            child: NotificationListener<ScrollNotification>(
-                              onNotification: _onListScroll,
-                              child: Scrollbar(
+                          child: NotificationListener<ScrollNotification>(
+                            onNotification: _onListScroll,
+                            child: Scrollbar(
+                              controller: _listScroll,
+                              child: ListView(
+                                key: const ValueKey('attendance-scroll'),
                                 controller: _listScroll,
-                                child: ListView(
-                                  key: const ValueKey('attendance-scroll'),
-                                  controller: _listScroll,
-                                  primary: false,
-                                  physics: const AlwaysScrollableScrollPhysics(
-                                    parent: ClampingScrollPhysics(),
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  children: [
-                                    if (visible.isEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 36,
-                                        ),
-                                        child: Column(
-                                          children: [
-                                            Icon(
-                                              _isPreview
-                                                  ? Icons.search_off_rounded
-                                                  : Icons.cloud_off_outlined,
-                                              size: 36,
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
-                                            const SizedBox(height: 16),
-                                            Text(
-                                              !_isPreview
-                                                  ? 'Waiting for attendance connection'
-                                                  : entries.isEmpty
-                                                  ? 'No sample check-ins for this date'
-                                                  : 'No matching check-ins',
-                                              textAlign: TextAlign.center,
-                                              style:
-                                                  theme.textTheme.titleMedium,
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              !_isPreview
-                                                  ? 'No live records or totals are available yet.'
-                                                  : entries.isEmpty
-                                                  ? 'Choose today or yesterday to explore the sample list.'
-                                                  : 'Try a different name, member number, or status.',
-                                              textAlign: TextAlign.center,
-                                              style: theme.textTheme.bodyMedium,
-                                            ),
-                                            if (query.isNotEmpty ||
-                                                _status != null)
-                                              TextButton(
-                                                key: const ValueKey(
-                                                  'attendance-reset-filters',
-                                                ),
-                                                onPressed: () {
-                                                  _resetList();
-                                                  setState(() {
-                                                    _search.clear();
-                                                    _status = null;
-                                                  });
-                                                },
-                                                child: const Text(
-                                                  'Clear filters',
-                                                ),
-                                              ),
-                                          ],
-                                        ),
-                                      )
-                                    else ...[
-                                      for (
-                                        var index = 0;
-                                        index < visible.length;
-                                        index++
-                                      ) ...[
-                                        if (index > 0)
-                                          const Divider(
-                                            height: 1,
-                                            color: Color(0xFFDDDDDD),
-                                          ),
-                                        _AttendanceRow(
-                                          key: ValueKey(
-                                            'attendance-entry-${visible[index].memberNumber}-${visible[index].time.millisecondsSinceEpoch}',
-                                          ),
-                                          entry: visible[index],
-                                          visits:
-                                              memberVisits[visible[index]
-                                                  .memberNumber]!,
-                                          wide: wide,
-                                        ),
-                                      ],
-                                    ],
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      'Check-ins record visits, not who is currently inside the gym. Staff authorization is not connected yet.',
-                                      style: theme.textTheme.bodySmall
-                                          ?.copyWith(
+                                primary: false,
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: ClampingScrollPhysics(),
+                                ),
+                                padding: EdgeInsets.zero,
+                                children: [
+                                  if (visible.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 36,
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            _isPreview
+                                                ? Icons.search_off_rounded
+                                                : Icons.cloud_off_outlined,
+                                            size: 36,
                                             color: theme
                                                 .colorScheme
                                                 .onSurfaceVariant,
                                           ),
-                                    ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            !_isPreview
+                                                ? 'Waiting for attendance connection'
+                                                : entries.isEmpty
+                                                ? 'No sample check-ins for this date'
+                                                : 'No matching check-ins',
+                                            textAlign: TextAlign.center,
+                                            style: theme.textTheme.titleMedium,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            !_isPreview
+                                                ? 'No live records or totals are available yet.'
+                                                : entries.isEmpty
+                                                ? 'Choose today or yesterday to explore the sample list.'
+                                                : 'Try a different name, member number, or status.',
+                                            textAlign: TextAlign.center,
+                                            style: theme.textTheme.bodyMedium,
+                                          ),
+                                          if (query.isNotEmpty ||
+                                              _status != null)
+                                            TextButton(
+                                              key: const ValueKey(
+                                                'attendance-reset-filters',
+                                              ),
+                                              onPressed: () {
+                                                _resetList();
+                                                setState(() {
+                                                  _search.clear();
+                                                  _status = null;
+                                                });
+                                              },
+                                              child: const Text(
+                                                'Clear filters',
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    )
+                                  else ...[
+                                    for (
+                                      var index = 0;
+                                      index < visible.length;
+                                      index++
+                                    ) ...[
+                                      if (index > 0)
+                                        const Divider(
+                                          height: 1,
+                                          color: Color(0xFFDDDDDD),
+                                        ),
+                                      _AttendanceRow(
+                                        key: ValueKey(
+                                          'attendance-entry-${visible[index].memberNumber}-${visible[index].time.millisecondsSinceEpoch}',
+                                        ),
+                                        entry: visible[index],
+                                        visits:
+                                            memberVisits[visible[index]
+                                                .memberNumber]!,
+                                        wide: wide,
+                                      ),
+                                    ],
                                   ],
-                                ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'Check-ins record visits, not who is currently inside the gym. Staff authorization is not connected yet.',
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -747,7 +722,15 @@ class _AttendancePageState extends State<AttendancePage>
             ),
           ],
         );
+        return page;
       },
+    );
+    return DumbbellRefresh(
+      key: const ValueKey('attendance-refresh'),
+      padding: widget.padding,
+      scrollController: _listScroll,
+      onRefresh: _refresh,
+      child: layout,
     );
   }
 }

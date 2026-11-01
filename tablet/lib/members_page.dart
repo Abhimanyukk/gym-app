@@ -14,11 +14,13 @@ class MembersPage extends StatefulWidget {
     required this.members,
     this.showSampleData = false,
     this.api,
+    this.padding = EdgeInsets.zero,
   });
 
   final List<MemberProfile> members;
   final bool showSampleData;
   final RepLabApi? api;
+  final EdgeInsets padding;
 
   @override
   State<MembersPage> createState() => _MembersPageState();
@@ -165,7 +167,7 @@ class _MembersPageState extends State<MembersPage> {
               : a.number.compareTo(b.number),
         );
 
-    return LayoutBuilder(
+    final layout = LayoutBuilder(
       builder: (context, constraints) {
         final readableWidth =
             constraints.maxWidth / MediaQuery.textScalerOf(context).scale(1);
@@ -203,7 +205,7 @@ class _MembersPageState extends State<MembersPage> {
           label: const Text('Add member'),
         );
 
-        return Column(
+        final page = Column(
           key: const ValueKey('members-page'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -360,228 +362,214 @@ class _MembersPageState extends State<MembersPage> {
                         ),
                       ),
                     Expanded(
-                      child: DumbbellRefresh(
-                        key: const ValueKey('members-refresh'),
-                        onRefresh: widget.api != null
-                            ? () => _load()
-                            : () => refreshLocalView(
-                                context,
-                                preview: _isPreview,
-                                rebuild: () => setState(() {}),
-                              ),
-                        child: Scrollbar(
+                      child: Scrollbar(
+                        controller: _scroll,
+                        child: ListView.separated(
+                          key: const ValueKey('members-list'),
                           controller: _scroll,
-                          child: ListView.separated(
-                            key: const ValueKey('members-list'),
-                            controller: _scroll,
-                            physics: const AlwaysScrollableScrollPhysics(
-                              parent: ClampingScrollPhysics(),
-                            ),
-                            padding: EdgeInsets.zero,
-                            itemCount:
-                                (visible.isEmpty ? 1 : visible.length) +
-                                (widget.api != null &&
-                                        visible.isNotEmpty &&
-                                        (_loading ||
-                                            _error != null ||
-                                            _liveMembers.length < _total)
-                                    ? 1
-                                    : 0),
-                            separatorBuilder: (_, _) => const Divider(
-                              height: 1,
-                              color: Color(0xFFDDDDDD),
-                            ),
-                            itemBuilder: (context, index) {
-                              if (index == visible.length &&
-                                  visible.isNotEmpty) {
-                                return Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: _loading
-                                      ? const Center(child: DumbbellLoader())
-                                      : TextButton(
-                                          key: const ValueKey(
-                                            'members-load-more',
-                                          ),
-                                          onPressed: () =>
-                                              _load(append: _error == null),
-                                          child: Text(
-                                            _error != null
-                                                ? 'Retry loading members'
-                                                : 'Load more members',
-                                          ),
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: ClampingScrollPhysics(),
+                          ),
+                          padding: EdgeInsets.zero,
+                          itemCount:
+                              (visible.isEmpty ? 1 : visible.length) +
+                              (widget.api != null &&
+                                      visible.isNotEmpty &&
+                                      (_loading ||
+                                          _error != null ||
+                                          _liveMembers.length < _total)
+                                  ? 1
+                                  : 0),
+                          separatorBuilder: (_, _) => const Divider(
+                            height: 1,
+                            color: Color(0xFFDDDDDD),
+                          ),
+                          itemBuilder: (context, index) {
+                            if (index == visible.length && visible.isNotEmpty) {
+                              return Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: _loading
+                                    ? const Center(child: DumbbellLoader())
+                                    : TextButton(
+                                        key: const ValueKey(
+                                          'members-load-more',
                                         ),
+                                        onPressed: () =>
+                                            _load(append: _error == null),
+                                        child: Text(
+                                          _error != null
+                                              ? 'Retry loading members'
+                                              : 'Load more members',
+                                        ),
+                                      ),
+                              );
+                            }
+                            if (visible.isEmpty) {
+                              if (_loading) {
+                                return const Padding(
+                                  padding: EdgeInsets.all(32),
+                                  child: Center(child: DumbbellLoader()),
                                 );
                               }
-                              if (visible.isEmpty) {
-                                if (_loading) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(32),
-                                    child: Center(child: DumbbellLoader()),
-                                  );
-                                }
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 32,
-                                  ),
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 32,
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      widget.api != null && _error != null
+                                          ? Icons.cloud_off_outlined
+                                          : widget.api != null || _isPreview
+                                          ? Icons.person_search_rounded
+                                          : Icons.cloud_off_outlined,
+                                      size: 36,
+                                      color: theme.colorScheme.onSurfaceVariant,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      widget.api != null
+                                          ? _error != null
+                                                ? 'Unable to load members'
+                                                : 'No matching members'
+                                          : _isPreview
+                                          ? 'No matching members'
+                                          : 'Waiting for member connection',
+                                      textAlign: TextAlign.center,
+                                      style: theme.textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      widget.api != null
+                                          ? _error ?? 'No registered members match this search.'
+                                          : _isPreview
+                                          ? 'Try another search or membership filter.'
+                                          : 'Registered members will appear once the backend is connected.',
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    if (widget.api != null)
+                                      TextButton(
+                                        onPressed: () => _load(),
+                                        child: const Text('Refresh members'),
+                                      ),
+                                    if (_isPreview)
+                                      TextButton(
+                                        key: const ValueKey('members-reset'),
+                                        onPressed: () => _update(() {
+                                          _search.clear();
+                                          _filter = 'All members';
+                                        }),
+                                        child: const Text('Clear filters'),
+                                      ),
+                                  ],
+                                ),
+                              );
+                            }
+                            final member = visible[index];
+                            final identity = Row(
+                              children: [
+                                _MemberAvatar(member: member),
+                                const SizedBox(width: 16),
+                                Expanded(
                                   child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Icon(
-                                        widget.api != null && _error != null
-                                            ? Icons.cloud_off_outlined
-                                            : widget.api != null || _isPreview
-                                            ? Icons.person_search_rounded
-                                            : Icons.cloud_off_outlined,
-                                        size: 36,
-                                        color:
-                                            theme.colorScheme.onSurfaceVariant,
-                                      ),
-                                      const SizedBox(height: 16),
                                       Text(
-                                        widget.api != null
-                                            ? _error != null
-                                                  ? 'Unable to load members'
-                                                  : 'No matching members'
-                                            : _isPreview
-                                            ? 'No matching members'
-                                            : 'Waiting for member connection',
-                                        textAlign: TextAlign.center,
-                                        style: theme.textTheme.titleMedium,
+                                        member.name,
+                                        style: theme.textTheme.bodyLarge
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                       ),
-                                      const SizedBox(height: 8),
+                                      const SizedBox(height: 4),
                                       Text(
-                                        widget.api != null
-                                            ? _error ?? 'No registered members match this search.'
-                                            : _isPreview
-                                            ? 'Try another search or membership filter.'
-                                            : 'Registered members will appear once the backend is connected.',
-                                        textAlign: TextAlign.center,
+                                        member.number,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
                                       ),
-                                      if (widget.api != null)
-                                        TextButton(
-                                          onPressed: () => _load(),
-                                          child: const Text('Refresh members'),
-                                        ),
-                                      if (_isPreview)
-                                        TextButton(
-                                          key: const ValueKey('members-reset'),
-                                          onPressed: () => _update(() {
-                                            _search.clear();
-                                            _filter = 'All members';
-                                          }),
-                                          child: const Text('Clear filters'),
-                                        ),
                                     ],
                                   ),
-                                );
-                              }
-                              final member = visible[index];
-                              final identity = Row(
-                                children: [
-                                  _MemberAvatar(member: member),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          member.name,
-                                          style: theme.textTheme.bodyLarge
-                                              ?.copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          member.number,
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                color: theme
-                                                    .colorScheme
-                                                    .onSurfaceVariant,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
+                                ),
+                              ],
+                            );
+                            return Semantics(
+                              button: true,
+                              child: InkWell(
+                                key: ValueKey('member-${member.number}'),
+                                onTap: () => _openMember(member),
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                    horizontal: 4,
                                   ),
-                                ],
-                              );
-                              return Semantics(
-                                button: true,
-                                child: InkWell(
-                                  key: ValueKey('member-${member.number}'),
-                                  onTap: () => _openMember(member),
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                      horizontal: 4,
-                                    ),
-                                    child: wide
-                                        ? Row(
-                                            children: [
-                                              Expanded(child: identity),
-                                              const SizedBox(width: 20),
-                                              SizedBox(
-                                                width: 140,
-                                                child: Text(
+                                  child: wide
+                                      ? Row(
+                                          children: [
+                                            Expanded(child: identity),
+                                            const SizedBox(width: 20),
+                                            SizedBox(
+                                              width: 140,
+                                              child: Text(
+                                                widget.api != null
+                                                    ? member.phone
+                                                    : member.plan ?? 'No plan',
+                                              ),
+                                            ),
+                                            const SizedBox(width: 20),
+                                            SizedBox(
+                                              width: 144,
+                                              child: Align(
+                                                alignment: Alignment.centerLeft,
+                                                child: _MembershipBadge(
+                                                  member: member,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            const Icon(
+                                              Icons.chevron_right_rounded,
+                                              size: 24,
+                                            ),
+                                          ],
+                                        )
+                                      : Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            identity,
+                                            const SizedBox(height: 12),
+                                            Wrap(
+                                              spacing: 16,
+                                              runSpacing: 8,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                Text(
                                                   widget.api != null
                                                       ? member.phone
                                                       : member.plan ??
                                                             'No plan',
                                                 ),
-                                              ),
-                                              const SizedBox(width: 20),
-                                              SizedBox(
-                                                width: 144,
-                                                child: Align(
-                                                  alignment:
-                                                      Alignment.centerLeft,
-                                                  child: _MembershipBadge(
-                                                    member: member,
-                                                  ),
+                                                _MembershipBadge(
+                                                  member: member,
                                                 ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              const Icon(
-                                                Icons.chevron_right_rounded,
-                                                size: 24,
-                                              ),
-                                            ],
-                                          )
-                                        : Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              identity,
-                                              const SizedBox(height: 12),
-                                              Wrap(
-                                                spacing: 16,
-                                                runSpacing: 8,
-                                                crossAxisAlignment:
-                                                    WrapCrossAlignment.center,
-                                                children: [
-                                                  Text(
-                                                    widget.api != null
-                                                        ? member.phone
-                                                        : member.plan ??
-                                                              'No plan',
-                                                  ),
-                                                  _MembershipBadge(
-                                                    member: member,
-                                                  ),
-                                                  const Icon(
-                                                    Icons.chevron_right_rounded,
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                  ),
+                                                const Icon(
+                                                  Icons.chevron_right_rounded,
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                 ),
-                              );
-                            },
-                          ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -591,7 +579,21 @@ class _MembersPageState extends State<MembersPage> {
             ),
           ],
         );
+        return page;
       },
+    );
+    return DumbbellRefresh(
+      key: const ValueKey('members-refresh'),
+      padding: widget.padding,
+      scrollController: _scroll,
+      onRefresh: widget.api != null
+          ? () => _load()
+          : () => refreshLocalView(
+              context,
+              preview: _isPreview,
+              rebuild: () => setState(() {}),
+            ),
+      child: layout,
     );
   }
 }

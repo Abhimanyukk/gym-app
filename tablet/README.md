@@ -84,15 +84,17 @@ Fixtures are available only in debug web runs. The production entry point is
 
 ```powershell
 docker exec -w /workspace/tablet gym-app-build flutter pub get
-docker exec -w /workspace/tablet gym-app-build flutter build apk --release --dart-define=API_BASE_URL=https://192.168.1.50:8443 --dart-define=API_CERT_ASSET=assets/certificates/server.crt
+docker exec -w /workspace/tablet gym-app-build flutter build apk --release --dart-define=API_BASE_URL=https://192.168.1.50:8443
 ```
 
 APK: `build/app/outputs/flutter-apk/app-release.apk`.
 Only the hostname from `API_BASE_URL` pre-fills first setup; its port cannot
 override the hardcoded 8443. Without that define, enter the hostname/IP.
-Once saved, device settings take precedence over build defaults. Without
-`API_CERT_ASSET`, Android uses standard trusted certificate authorities.
-Custom certificate trust still validates the certificate chain, hostname/IP and
+Once saved, device settings take precedence over build defaults. Android loads
+`assets/certificates/server.crt` by default, in addition to standard trusted
+certificate authorities; no certificate build flag is needed. `API_CERT_ASSET`
+can explicitly select a different asset (or an empty value for standard roots
+only). Custom certificate trust still validates the certificate chain, hostname/IP and
 expiry; it never installs an accept-all certificate callback.
 
 Rebuild with the Pi's public certificate before deploying an APK built with the
@@ -164,6 +166,9 @@ verification; device PIN fallback is not an additional app login.
 
 Browser preview saves the host only, not bearer keys in browser storage.
 A browser reload therefore asks for the password again; Android does not.
+Long-lived sessions use daily expiry checkpoints instead of a single 90-day
+browser timer, avoiding timer overflow and immediate false expiry. Actual expiry
+and server-side revocation remain enforced.
 Revocation/password changes return to login and close open dialogs.
 Logout forgets the saved tablet key even if server revocation cannot be
 confirmed, with a warning that the old key then expires normally.

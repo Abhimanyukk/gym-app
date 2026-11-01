@@ -27,6 +27,44 @@ Future<void> revealAttendance(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
+  testWidgets('attendance connection and preview ribbons use amber warnings', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1600, 1100));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final preview in [false, true]) {
+      await tester.pumpWidget(
+        GymManagementApp(home: DashboardScreen(showSampleData: preview)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('nav-Attendance')));
+      await tester.pumpAndSettle();
+      final ribbon = find.byKey(const ValueKey('attendance-info-ribbon'));
+      expect(
+        find.descendant(
+          of: ribbon,
+          matching: find.byIcon(Icons.warning_amber_rounded),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.info_outline_rounded), findsNothing);
+      final warning = tester.widget<Container>(
+        find.descendant(of: ribbon, matching: find.byType(Container)).first,
+      );
+      expect((warning.decoration as BoxDecoration).color, Colors.amber.shade50);
+      expect(
+        find.descendant(
+          of: ribbon,
+          matching: find.textContaining(
+            preview ? 'Sample data' : 'Attendance is not connected',
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
   test('sample dates and repeat visits are consistent', () {
     final today = gymNow();
     final entries = sampleAttendanceFor(today);

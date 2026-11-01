@@ -7,12 +7,20 @@ import 'device_session.dart';
 import 'replab_api.dart';
 import 'server_host_fields.dart';
 import 'settings_preview.dart';
+import 'warning_ribbon.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.preview, this.api, this.device});
+  const SettingsPage({
+    super.key,
+    required this.preview,
+    this.api,
+    this.device,
+    this.padding = EdgeInsets.zero,
+  });
   final SettingsPreview preview;
   final RepLabApi? api;
   final DeviceSession? device;
+  final EdgeInsets padding;
   @override
   State<SettingsPage> createState() => _SettingsPageState();
 }
@@ -20,6 +28,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = false;
   bool _signingOut = false;
+  final _scroll = ScrollController();
   String? _error;
   @override
   void initState() {
@@ -47,6 +56,12 @@ class _SettingsPageState extends State<SettingsPage> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
   }
 
   Future<void> _dialog(String kind) async {
@@ -210,7 +225,7 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     ];
-    return Column(
+    final page = Column(
       key: const ValueKey('settings-page'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -226,13 +241,13 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 8),
         if (_loading)
           const Center(child: DumbbellLoader(label: 'Loading settings')),
-        if (_error != null) ...[
-          Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-          TextButton(onPressed: _load, child: const Text('Retry settings')),
-        ],
         Expanded(
           child: SingleChildScrollView(
             key: const PageStorageKey('settings-scroll'),
+            controller: _scroll,
+            physics: const AlwaysScrollableScrollPhysics(
+              parent: ClampingScrollPhysics(),
+            ),
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final columns =
@@ -248,20 +263,22 @@ class _SettingsPageState extends State<SettingsPage> {
                   children: [
                     const Text('Manage gym preferences and device connection.'),
                     const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.primary.withValues(alpha: .07),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        widget.api != null
-                            ? 'Connected · Single-administrator server'
-                            : 'Preview only · No server configuration or passwords are changed.',
+                    if (widget.api == null || _error != null) ...[
+                      WarningRibbon(
                         key: const ValueKey('settings-notice'),
+                        message:
+                            _error ??
+                            (widget.preview.enabled
+                                ? 'Preview only · No server configuration or passwords are changed.'
+                                : 'Backend not connected. Server settings are unavailable.'),
                       ),
-                    ),
-                    const SizedBox(height: 24),
+                      if (_error != null)
+                        TextButton(
+                          onPressed: _load,
+                          child: const Text('Retry settings'),
+                        ),
+                      const SizedBox(height: 24),
+                    ],
                     Wrap(
                       spacing: 20,
                       runSpacing: 20,
@@ -273,8 +290,14 @@ class _SettingsPageState extends State<SettingsPage> {
                     const SizedBox(height: 24),
                     Card(
                       child: ExpansionTile(
-                        key: const ValueKey('settings-advanced'),
-                        title: const Text('Advanced settings'),
+                        // Store expansion separately from the page's scroll offset.
+                        key: const PageStorageKey(
+                          'settings-advanced-expansion',
+                        ),
+                        title: const Text(
+                          'Advanced settings',
+                          key: ValueKey('settings-advanced'),
+                        ),
                         leading: const Icon(Icons.tune_rounded),
                         childrenPadding: const EdgeInsets.all(20),
                         children: [
@@ -319,6 +342,19 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ],
+    );
+    return DumbbellRefresh(
+      key: const ValueKey('settings-refresh'),
+      padding: widget.padding,
+      scrollController: _scroll,
+      onRefresh: widget.api != null
+          ? _load
+          : () => refreshLocalView(
+              context,
+              preview: widget.preview.enabled,
+              rebuild: () => setState(() {}),
+            ),
+      child: page,
     );
   }
 }

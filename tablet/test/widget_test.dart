@@ -478,8 +478,11 @@ void main() {
         of: body,
         matching: find.byType(SingleChildScrollView),
       );
-      expect(tester.getTopLeft(contentScroll), const Offset(256, 24));
-      expect(tester.getSize(contentScroll).width, 944 - 20);
+      final refreshBody = find.byKey(const ValueKey('dashboard-refresh'));
+      expect(tester.getTopLeft(refreshBody), const Offset(256, 24));
+      expect(tester.getSize(refreshBody).width, 944 - 20);
+      expect(tester.getTopLeft(contentScroll), const Offset(288, 56));
+      expect(tester.getSize(contentScroll).width, 944 - 20 - 64);
 
       await tester.pumpWidget(
         const MaterialApp(
