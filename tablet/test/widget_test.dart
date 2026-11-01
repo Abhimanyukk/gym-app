@@ -195,7 +195,7 @@ void main() {
     );
 
     const sections = [
-      ('Attendance', 'Attendance records will appear here.'),
+      ('Attendance', 'See who checked in and when.'),
       ('Members', 'Member management will appear here.'),
       ('Settings', 'App settings will appear here.'),
       ('Dashboard', 'Welcome to RepLab Fitness'),
@@ -324,8 +324,21 @@ void main() {
     final scrollable = tester.state<ScrollableState>(
       find.descendant(of: body, matching: find.byType(Scrollable)),
     );
+    final navigation = find.byKey(const ValueKey('sidebar-navigation'));
+    final buttonPositions = {
+      for (final title in ['Dashboard', 'Attendance', 'Members', 'Settings'])
+        title: tester.getRect(find.byKey(ValueKey('nav-$title'))),
+    };
 
     expect(tester.getSize(sidebar).width, 80);
+    expect(
+      find.descendant(of: sidebar, matching: find.byType(Scrollable)),
+      findsNothing,
+    );
+    for (final rect in buttonPositions.values) {
+      expect(rect.height, greaterThanOrEqualTo(48));
+      expect(rect.bottom, lessThanOrEqualTo(tester.getRect(sidebar).bottom));
+    }
     await tester.drag(body, const Offset(0, -160));
     await tester.pumpAndSettle();
 
@@ -333,11 +346,14 @@ void main() {
     expect(tester.getTopLeft(sidebar), sidebarPosition);
     expect(tester.getTopLeft(logo), logoPosition);
 
-    await tester.drag(
-      find.byKey(const ValueKey('sidebar-navigation')),
-      const Offset(0, -300),
-    );
+    await tester.drag(navigation, const Offset(0, -300));
     await tester.pumpAndSettle();
+    for (final title in buttonPositions.keys) {
+      expect(
+        tester.getRect(find.byKey(ValueKey('nav-$title'))),
+        buttonPositions[title],
+      );
+    }
     final settings = find.byKey(const ValueKey('nav-Settings'));
     await tester.tap(settings);
     await tester.pumpAndSettle();
@@ -358,6 +374,45 @@ void main() {
     expect(tester.getTopLeft(sidebar), sidebarPosition);
     expect(tester.getTopLeft(logo), logoPosition);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tablet sidebar buttons cannot scroll in either orientation', (
+    tester,
+  ) async {
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    for (final size in [const Size(1024, 768), const Size(800, 1200)]) {
+      await tester.binding.setSurfaceSize(size);
+      await tester.pumpWidget(const GymManagementApp(home: DashboardScreen()));
+      await tester.pumpAndSettle();
+      final sidebar = find.byKey(const ValueKey('sidebar'));
+      final navigationButton = find.byKey(const ValueKey('nav-Attendance'));
+      final positions = {
+        for (final title in ['Dashboard', 'Attendance', 'Members', 'Settings'])
+          title: tester.getRect(find.byKey(ValueKey('nav-$title'))),
+      };
+      expect(
+        find.descendant(of: sidebar, matching: find.byType(Scrollable)),
+        findsNothing,
+      );
+      for (final offset in [const Offset(0, -300), const Offset(0, 300)]) {
+        await tester.drag(navigationButton, offset);
+        await tester.pumpAndSettle();
+        for (final title in positions.keys) {
+          expect(
+            tester.getRect(find.byKey(ValueKey('nav-$title'))),
+            positions[title],
+          );
+        }
+      }
+      for (final title in positions.keys) {
+        final button = find.byKey(ValueKey('nav-$title'));
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(tester.widget<ListTile>(button).selected, isTrue);
+      }
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
   });
 
   testWidgets(
@@ -474,8 +529,8 @@ void main() {
           'Bilal John Kurishingal',
           'Nadeshan',
           'Pulikkattil Charlie',
-          '08:12 AM',
-          '08:04 AM',
+          '8:12 AM',
+          '8:04 AM',
           'Expires in 12 days',
           'Active',
           'Due for 2 days',
@@ -483,7 +538,7 @@ void main() {
         ]) {
           expect(find.text(text), findsOneWidget);
         }
-        expect(find.text('07:46 AM'), findsNWidgets(2));
+        expect(find.text('7:46 AM'), findsNWidgets(2));
         final cards = [
           for (final title in summaries)
             tester.getRect(find.byKey(ValueKey('summary-$title'))),
@@ -499,11 +554,6 @@ void main() {
         expect(tester.takeException(), isNull);
 
         // Leaving Dashboard disposes its clock.
-        await tester.drag(
-          find.byKey(const ValueKey('sidebar-navigation')),
-          const Offset(0, -300),
-        );
-        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('nav-Settings')));
         await tester.pumpAndSettle();
         await tester.pump(const Duration(seconds: 2));

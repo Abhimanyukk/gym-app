@@ -47,6 +47,31 @@ The normal app shows unavailable totals and an attendance-not-connected
 message until the backend is integrated; it does not report invented
 member counts or revenue.
 
+Attendance opens on today's gym-local date, with member numbers,
+check-in times (IST), membership-status badges, search, status filters,
+latest/earliest sorting, and a date picker with a Today shortcut.
+Daily summaries distinguish unique members from repeat check-ins and
+flag expiring/expired memberships. Preview fixtures cover today and
+yesterday and share the dashboard's recent visits and 30-member total.
+The normal app shows unavailable data until integration; visits are
+not presented as current occupancy. No manual attendance edits or
+unverified terminal integration are added.
+
+Attendance's title and date controls stay fixed. Swiping up or scrolling
+anywhere over the check-ins card (including its heading, search, and filters)
+folds the info ribbon and daily summaries away with a 280ms vertical shutter,
+enlarging the check-ins card. Search, filters, and the check-in heading
+remain fixed at the top of the card; only the attendance list scrolls.
+Gestures over the info ribbon or the three daily summary cards do not hide them.
+Swiping down or reverse-scrolling anywhere on the check-ins card reopens the
+overview, even before the rows reach the top. The summary toggle also reopens it.
+Narrow/large-text layouts start with the overview hidden and offer its
+totals from the header. Reduced-motion settings disable the animation.
+
+The left sidebar is fixed and does not scroll; only the page body scrolls.
+Short displays use compact 48px icon buttons so every destination stays
+reachable without scrolling the navigation.
+
 Dart files under `tablet/lib/` and files under `tablet/assets/` are
 watched automatically, including edits made by external tools. After
 an edit settles, Flutter hot-restarts the browser preview. Navigation

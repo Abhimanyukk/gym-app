@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'sample_attendance.dart';
+
 class DashboardOverview extends StatelessWidget {
   const DashboardOverview({super.key, this.showSampleData = false});
 
@@ -15,36 +17,12 @@ class DashboardOverview extends StatelessWidget {
     (title: 'Active Plans', value: '3'),
     (title: 'Revenue (Today)', value: '\$12,346'),
   ];
-  static const _checkIns = [
-    (
-      name: 'Poovalli Induchoodan',
-      time: '08:12 AM',
-      status: 'Expires in 12 days',
-      color: Color(0xFF9B6500),
-    ),
-    (
-      name: 'Bilal John Kurishingal',
-      time: '08:04 AM',
-      status: 'Active',
-      color: Color(0xFF08752B),
-    ),
-    (
-      name: 'Nadeshan',
-      time: '07:46 AM',
-      status: 'Due for 2 days',
-      color: Color(0xFF830D11),
-    ),
-    (
-      name: 'Pulikkattil Charlie',
-      time: '07:46 AM',
-      status: 'Expires tomorrow',
-      color: Color(0xFF9B6500),
-    ),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final checkIns = showSampleData
+        ? sampleAttendanceFor(gymNow()).take(4).toList()
+        : <SampleCheckIn>[];
     return LayoutBuilder(
       builder: (context, constraints) {
         final readableWidth =
@@ -121,14 +99,16 @@ class DashboardOverview extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                   if (showSampleData)
-                    for (var index = 0; index < _checkIns.length; index++) ...[
+                    for (var index = 0; index < checkIns.length; index++) ...[
                       if (index > 0)
                         const Divider(height: 1, color: Color(0xFFDDDDDD)),
                       _CheckInRow(
-                        name: _checkIns[index].name,
-                        time: _checkIns[index].time,
-                        status: _checkIns[index].status,
-                        statusColor: _checkIns[index].color,
+                        name: checkIns[index].name,
+                        time: MaterialLocalizations.of(context).formatTimeOfDay(
+                          TimeOfDay.fromDateTime(checkIns[index].time),
+                        ),
+                        status: checkIns[index].statusLabel,
+                        statusColor: checkIns[index].membership.color,
                         compact: readableWidth < 640,
                       ),
                     ]
@@ -188,9 +168,7 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
   @override
   Widget build(BuildContext context) {
     // Asia/Kolkata has a fixed UTC+05:30 offset; ignore the preview host's timezone.
-    final now = DateTime.now().toUtc().add(
-      const Duration(hours: 5, minutes: 30),
-    );
+    final now = gymNow();
     final period = now.hour < 12
         ? 'Morning'
         : now.hour < 17
