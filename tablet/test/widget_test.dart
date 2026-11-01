@@ -196,7 +196,7 @@ void main() {
 
     const sections = [
       ('Attendance', 'See who checked in and when.'),
-      ('Members', 'Member management will appear here.'),
+      ('Members', 'Waiting for member connection'),
       ('Settings', 'App settings will appear here.'),
       ('Dashboard', 'Welcome to RepLab Fitness'),
     ];

@@ -5,6 +5,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'attendance_page.dart';
 import 'dashboard_overview.dart';
+import 'member_profile.dart';
+import 'members_page.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.showSampleData = false});
@@ -20,11 +22,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   static const _sections = [
     (title: 'Dashboard', icon: 'assets/icons/dashboard.svg', message: ''),
     (title: 'Attendance', icon: 'assets/icons/attendance.svg', message: ''),
-    (
-      title: 'Members',
-      icon: 'assets/icons/members.svg',
-      message: 'Member management will appear here.',
-    ),
+    (title: 'Members', icon: 'assets/icons/members.svg', message: ''),
     (
       title: 'Settings',
       icon: 'assets/icons/settings.svg',
@@ -33,6 +31,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ];
 
   int _selectedIndex = 0;
+  // Keep preview registrations when switching sidebar sections; never persist
+  // test member details or pretend this is the staff-authorized backend.
+  late final _members = kDebugMode && widget.showSampleData
+      ? sampleMembers()
+      : <MemberProfile>[];
 
   @override
   Widget build(BuildContext context) {
@@ -167,12 +170,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 key: const ValueKey('section-body'),
                 child: SafeArea(
                   left: false,
-                  child: _selectedIndex == 1
+                  child: _selectedIndex == 1 || _selectedIndex == 2
                       ? Padding(
                           padding: const EdgeInsets.all(32),
-                          child: AttendancePage(
-                            showSampleData: kDebugMode && widget.showSampleData,
-                          ),
+                          child: _selectedIndex == 1
+                              ? AttendancePage(
+                                  showSampleData:
+                                      kDebugMode && widget.showSampleData,
+                                )
+                              : MembersPage(
+                                  members: _members,
+                                  showSampleData:
+                                      kDebugMode && widget.showSampleData,
+                                ),
                         )
                       : SingleChildScrollView(
                           key: PageStorageKey(section.title),

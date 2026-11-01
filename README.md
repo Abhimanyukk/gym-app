@@ -68,6 +68,15 @@ overview, even before the rows reach the top. The summary toggle also reopens it
 Narrow/large-text layouts start with the overview hidden and offer its
 totals from the header. Reduced-motion settings disable the animation.
 
+Members shows a searchable, membership-filtered directory with clickable profiles
+and an Add member form. Profiles include contact details, joining date, plan dates,
+notes, and recent sample attendance. Billing/history remains explicitly unavailable.
+The debug preview has 178 fictional profiles matching the dashboard reference.
+Validated additions are preview-only, remain when changing sidebar sections, and
+disappear on refresh/hot restart. No real records are loaded or saved until the
+backend and staff authorization are connected; registration saving is disabled
+in the normal app. No biometric data, plans, or payments are created by the form.
+
 The left sidebar is fixed and does not scroll; only the page body scrolls.
 Short displays use compact 48px icon buttons so every destination stays
 reachable without scrolling the navigation.
