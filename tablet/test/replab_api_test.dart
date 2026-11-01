@@ -11,7 +11,7 @@ void main() {
   test('HTTPS address and safe URL requirements', () {
     for (final url in [
       '',
-      'http://localhost:8001',
+      'http://localhost:8443',
       'https://u:p@host',
       'https://host/path',
       'https://host?q=x',
@@ -23,19 +23,32 @@ void main() {
   });
 
   test(
+    'setup sessions cannot enter the dashboard before persistence and consent',
+    () async {
+      final fixture = ApiFixture();
+      final api = RepLabApi(client: fixture.client);
+      addTearDown(api.dispose);
+      await api.login('https://localhost:8443', 'synthetic', notify: false);
+      expect(api.sessionKey, isNotNull);
+      expect(api.signedIn, isFalse);
+      api.publishSession();
+      expect(api.signedIn, isTrue);
+    },
+  );
+
+  test(
     'real contract serialization, auth, query encoding and session revocation',
     () async {
       final fixture = ApiFixture();
       final api = RepLabApi(client: fixture.client);
       addTearDown(api.dispose);
-      await api.login(
-        'https://localhost:8001',
-        ' admin@example.com ',
-        'synthetic test password',
-      );
+      await api.login('https://localhost:8443', 'synthetic test password');
       expect(api.signedIn, isTrue);
       expect(api.admin?.name, 'Server Admin');
-      final login = fixture.requests.single;
+      final login = fixture.requests.singleWhere(
+        (r) => r.url.path.endsWith('/login'),
+      );
+      expect(login.body, isNot(contains('email')));
       expect(login.followRedirects, isFalse);
       expect(login.headers.containsKey('Authorization'), isFalse);
       expect(await api.dashboard(), containsPair('total_members', 1));
@@ -66,16 +79,12 @@ void main() {
       final api = RepLabApi(client: fixture.client);
       addTearDown(api.dispose);
       await expectLater(
-        api.login('https://localhost:8001', 'admin@example.com', 'synthetic'),
+        api.login('https://localhost:8443', 'synthetic'),
         throwsA(isA<ApiException>()),
       );
       expect(api.signedIn, isFalse);
       fixture.allowLogin = true;
-      await api.login(
-        'https://localhost:8001',
-        'admin@example.com',
-        'synthetic',
-      );
+      await api.login('https://localhost:8443', 'synthetic');
       fixture.expired = true;
       await expectLater(api.dashboard(), throwsA(isA<ApiException>()));
       expect(api.signedIn, isFalse);
@@ -87,7 +96,7 @@ void main() {
     final fixture = ApiFixture();
     final api = RepLabApi(client: fixture.client);
     addTearDown(api.dispose);
-    await api.login('https://localhost:8001', 'admin@example.com', 'synthetic');
+    await api.login('https://localhost:8443', 'synthetic');
     fixture.failReads = true;
     await expectLater(api.members(), throwsA(isA<ApiException>()));
     expect(api.signedIn, isTrue);
@@ -110,7 +119,9 @@ void main() {
     () async {
       final fixture = ApiFixture();
       final client = MockClient(
-        (request) => request.url.path.endsWith('/login')
+        (request) =>
+            request.url.path.endsWith('/login') ||
+                request.url.path == '/health/ready'
             ? fixture.client.get(request.url)
             : Completer<http.Response>().future,
       );
@@ -119,11 +130,7 @@ void main() {
         timeout: const Duration(milliseconds: 10),
       );
       addTearDown(api.dispose);
-      await api.login(
-        'https://localhost:8001',
-        'admin@example.com',
-        'synthetic',
-      );
+      await api.login('https://localhost:8443', 'synthetic');
       await expectLater(
         api.saveSettings('Synthetic', '', ''),
         throwsA(

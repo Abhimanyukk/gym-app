@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 typedef PreviewAdmin = ({String name, String email});
 
 // dover-gain-efficient: preview identities/preferences only, not authentication.
-// Keep passwords out of this state. Real authorization and the three-admin limit
+// Keep passwords out of this state. Real authorization and the single-admin limit
 // must also be enforced transactionally by the backend when it is integrated.
 class SettingsPreview {
   SettingsPreview({bool enabled = false}) : enabled = kDebugMode && enabled {
@@ -12,7 +12,7 @@ class SettingsPreview {
     }
   }
 
-  static const maxAdmins = 3;
+  static const maxAdmins = 1;
   final bool enabled;
   final List<PreviewAdmin> _admins = [];
   List<PreviewAdmin> get admins => List.unmodifiable(_admins);
@@ -25,7 +25,9 @@ class SettingsPreview {
 
   String? adminEmailError(String? value) {
     if (!enabled) return 'Admin management requires the backend.';
-    if (_admins.length >= maxAdmins) return 'Maximum of 3 admins reached.';
+    if (_admins.length >= maxAdmins) {
+      return 'Only one server administrator is allowed.';
+    }
     final email = (value ?? '').trim().toLowerCase();
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
       return 'Enter a valid email address';

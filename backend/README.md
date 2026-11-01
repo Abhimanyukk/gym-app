@@ -15,13 +15,15 @@ libraries; build against an OS compatible with the Pi, not Windows.
 ## Implemented scope
 
 - Axum/Tokio API; SQLx PostgreSQL pool capped at five connections.
-- Admin login/logout, eight-hour opaque bearer sessions, current-admin lookup,
-  password changes that verify the current password and revoke all own sessions.
+- Password-only login/logout, revocable opaque device sessions with a 90-day
+  idle lifetime renewed by authenticated resume, and current-admin lookup.
+  Password changes verify the current password and revoke every saved session.
 - Argon2id passwords (64 MiB, three iterations, parallelism four), NFC password
   normalization, 15–128-character new passwords. Hashes run outside async workers,
   with at most two concurrent hashes. No default credentials or public bootstrap.
-- Maximum three admins, normalized unique emails, transaction lock + DB constraints.
-- Persistent login limits: 10/email and 30/source IP per 15 minutes. Forwarded
+- Exactly one administrator, enforced transactionally and by DB constraints.
+  Legacy account metadata is preserved but is not used for login.
+- Persistent login limits: 10/server and 30/source IP per 15 minutes. Forwarded
   IP headers are ignored. Do not add an unconfigured reverse proxy.
 - Gym settings; member registration, directory/search/pagination, basic profiles.
 - Atomic mutation + audit + commit **before** success response; restricted DB
@@ -37,8 +39,61 @@ reports, automatic backup scheduling, or forgotten-password recovery.
 Unsupported dashboard totals are null, not fake zeroes. An active member record
 does not imply a valid subscription or entry rights.
 
-The tablet uses these REST endpoints after server login. Device PIN/biometrics
-alone do not authenticate an administrator to this server.
+The tablet enrolls once using the server password, then securely remembers a
+random session key, never the password. Optional biometrics gate local unlock;
+the key must still pass server authentication. HTTPS port **8443 is hardcoded**
+in the executable and app. `API_PORT` entries in old configurations are ignored.
+Only the bind address, allowed hosts/origins, certificate paths and database
+connection settings remain configurable.
+
+## Upgrade an existing v0.2 Pi without resetting data
+
+Use `build/replab-linux-arm64-v0.3.0.tar.gz` and its SHA-256 sidecar. Transfer both
+to the Pi, compare their hashes, and extract into a **new** release directory.
+Do not rerun `configure`, `init-db`, `create-admin` or `create-cert.sh`.
+Keep the existing accounts, database, secrets, certificate and systemd unit.
+
+```powershell
+scp backend/build/replab-linux-arm64-v0.3.0.tar.gz backend/build/replab-linux-arm64-v0.3.0.tar.gz.sha256 pi@192.168.31.239:~/
+```
+
+On the Pi:
+
+```sh
+cd ~
+sha256sum replab-linux-arm64-v0.3.0.tar.gz
+cat replab-linux-arm64-v0.3.0.tar.gz.sha256
+# Proceed only if the digests match.
+mkdir ~/replab-release-v0.3.0
+tar -xzf replab-linux-arm64-v0.3.0.tar.gz -C ~/replab-release-v0.3.0
+cd ~/replab-release-v0.3.0
+./replab-server --version
+ldd ./replab-server
+sudo sh /opt/replab/tools/backup.sh "/var/backups/replab/pre-v0.3-$(date +%Y%m%d-%H%M%S).dump" --verify
+# Keep the old binary; stop if this backup path already exists.
+sudo test ! -e /opt/replab/replab-server-v0.2.0
+```
+
+If all checks succeed:
+
+```sh
+sudo systemctl stop replab
+sudo cp -a /opt/replab/replab-server /opt/replab/replab-server-v0.2.0
+sudo install -o root -g root -m 755 ./replab-server /opt/replab/replab-server
+sudo cp -r tools /opt/replab/
+sudo /opt/replab/replab-server --env-file /etc/replab/owner.env migrate
+# Restart only after migration succeeds.
+sudo systemctl start replab
+sudo curl --cacert /etc/replab/server.crt https://192.168.31.239:8443/health/ready
+```
+
+Readiness must contain `"schema":"2"`. Migration preserves the sole existing
+administrator's ID, name, email and password hash, as well as all business data.
+If more than one administrator exists, migration refuses atomically without
+deleting anyone: stop and choose the account deliberately before proceeding.
+The updated tablet requires this migration before first setup.
+Old APK login bodies containing `email` remain accepted, but account selection
+is now password-only. Existing keys retain their expiry until successfully resumed.
 
 ## 1. Prepare the Pi
 
@@ -77,7 +132,7 @@ rules in `pg_hba.conf`; do not add LAN-wide `trust` rules or expose port 5432.
 
 ## 2. Obtain the executable-only deployment package
 
-After a build here, `build/replab-linux-arm64.tar.gz` contains:
+After a build here, `build/replab-linux-arm64-v0.3.0.tar.gz` contains:
 
 - `replab-server`
 - `deploy/replab.service`
@@ -90,7 +145,7 @@ files, or sample member records** in the package. A SHA-256 sidecar is supplied.
 From Windows PowerShell in `backend/`, replace the SSH user/IP:
 
 ```powershell
-scp build/replab-linux-arm64.tar.gz build/replab-linux-arm64.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_IP:~/
+scp build/replab-linux-arm64-v0.3.0.tar.gz build/replab-linux-arm64-v0.3.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_IP:~/
 ```
 
 On the Pi:
@@ -98,10 +153,10 @@ On the Pi:
 ```sh
 cd ~
 # The sidecar's recorded path may include build/; compare the digest explicitly:
-sha256sum replab-linux-arm64.tar.gz
-cat replab-linux-arm64.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.3.0.tar.gz
+cat replab-linux-arm64-v0.3.0.tar.gz.sha256
 mkdir -p ~/replab-release
-tar -xzf replab-linux-arm64.tar.gz -C ~/replab-release
+tar -xzf replab-linux-arm64-v0.3.0.tar.gz -C ~/replab-release
 cd ~/replab-release
 ./replab-server --version
 ldd ./replab-server
@@ -115,7 +170,7 @@ and the committed lockfile:
 
 ```sh
 cargo build --locked --release
-sh tools/package.sh target/release/replab-server build/replab-linux-arm64.tar.gz
+sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.3.0.tar.gz
 ```
 
 Compilers/source may be on a build machine; they are not production prerequisites.
@@ -151,8 +206,9 @@ Keep both environment files and the private key protected.
 `replab_app` has only API permissions. Backups use the host's trusted PostgreSQL
 OS administrator, not an API route or credentials embedded in the executable.
 
-The admin CLI securely prompts for name/email/password and works only before
-any admin exists. Subsequent administrators require authenticated API calls.
+The admin CLI securely prompts for a password and confirmation only, and works
+only before the single admin exists. No username or email is required.
+An authenticated API call cannot create a second administrator.
 No recovery/reset command is provided yet.
 
 ## 4. Start the systemd service
@@ -170,7 +226,7 @@ Use `sudo` for this check: `/etc/replab` is restricted to root and the `replab`
 group, so an ordinary login user cannot read the certificate through it.
 Keep the directory, private key, and environment-file permissions unchanged.
 
-Expected readiness: `{"status":"ready","database":"ok","schema":"1"}`.
+Expected readiness: `{"status":"ready","database":"ok","schema":"2"}`.
 The service starts after boot, restarts failures, runs as non-root `replab`,
 and has a read-only application filesystem and 512-MiB memory cap.
 Migrations are manual operator actions, never automatic API startup resets.
@@ -194,18 +250,22 @@ All `/api/v1` routes except login require `Authorization: Bearer <access_token>`
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health/live`, `/health/ready` | Process and DB/schema health |
-| POST | `/api/v1/auth/login` | Email/password login |
+| POST | `/api/v1/auth/login` | Server password only |
 | GET | `/api/v1/auth/me` | Current admin |
+| POST | `/api/v1/auth/resume` | Authenticate remembered key, renew 90-day idle lifetime |
 | POST | `/api/v1/auth/logout` | Revoke current session |
 | POST | `/api/v1/auth/change-password` | Verify current password, revoke all own sessions |
-| GET, POST | `/api/v1/admins` | List/add admins, maximum three |
+| GET, POST | `/api/v1/admins` | Legacy account API; second-admin creation refused |
 | GET, PUT | `/api/v1/settings` | Read/replace gym preferences |
 | GET, POST | `/api/v1/members` | Searchable directory/registration |
 | GET | `/api/v1/members/{uuid}` | Basic member profile |
 | GET | `/api/v1/dashboard/summary` | Real member counts, unavailable totals null |
 
-Login body: `{"email":"<admin email>","password":"<password>"}`.
+Login body: `{"password":"<password>"}`.
 Result: `access_token`, `token_type`, `expires_at`, public `admin`.
+Resume has no body; send the saved key in the Authorization header. It returns
+`expires_at` and `admin` without rotating the key. The server stores only key
+hashes. Logout revokes the current key; password change revokes every key.
 Don't put credentials/tokens into URLs, command arguments, logs or shell history.
 
 Registration body: `{"name":"Test Member","phone":"+91 9876543210"}`.
@@ -295,10 +355,10 @@ docker compose build api
 docker compose up -d db
 docker compose run --rm migrate
 docker compose up -d api
-curl.exe --cacert certs/server.crt https://localhost:8001/health/ready
+curl.exe --cacert certs/server.crt https://localhost:8443/health/ready
 ```
 
-The Rust development endpoint is now **HTTPS** on localhost:8001, not the old
+The Rust development endpoint is now **HTTPS** on localhost:8443, not the old
 HTTP Python server. Browser trust must be configured for its local certificate.
 Do not use development credentials/configuration for the Pi.
 Behind a corporate HTTPS proxy, optionally provide its already-trusted public
@@ -338,7 +398,7 @@ rustup target add aarch64-unknown-linux-gnu
 sudo apt install gcc-aarch64-linux-gnu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
   cargo build --locked --release --target aarch64-unknown-linux-gnu
-sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64.tar.gz
+sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.3.0.tar.gz
 ```
 
 ## Existing Python-era PostgreSQL databases

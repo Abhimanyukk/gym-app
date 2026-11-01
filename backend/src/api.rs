@@ -50,6 +50,7 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         )
         .route("/api/v1/auth/login", post(login))
         .route("/api/v1/auth/me", get(me))
+        .route("/api/v1/auth/resume", post(resume))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/auth/change-password", post(change_password))
         .route("/api/v1/admins", get(admins).post(add_admin))
@@ -173,14 +174,14 @@ async fn ready(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
     let versions: Vec<i16> = sqlx::query_scalar("SELECT version FROM replab_schema")
         .fetch_all(&state.pool)
         .await?;
-    if versions != vec![1] {
+    if versions != vec![2] {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "schema_not_ready",
             "Run the database migration.",
         ));
     }
-    Ok(Json(json!({"status":"ready","database":"ok","schema":"1"})))
+    Ok(Json(json!({"status":"ready","database":"ok","schema":"2"})))
 }
 async fn login(
     State(state): State<Arc<AppState>>,
@@ -191,6 +192,11 @@ async fn login(
 }
 async fn me(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Json<Admin>> {
     Ok(Json(services::authenticate(&state, &headers).await?.admin))
+}
+async fn resume(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Json<Value>> {
+    Ok(Json(
+        services::resume(&state, services::authenticate(&state, &headers).await?).await?,
+    ))
 }
 async fn logout(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<StatusCode> {
     services::logout(&state, services::authenticate(&state, &headers).await?).await?;

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/app_loading.dart';
 import 'package:gym_management_app/dashboard_screen.dart';
 import 'package:gym_management_app/main.dart';
+import 'package:gym_management_app/replab_api.dart';
 
 import 'api_fixture.dart';
 
@@ -244,11 +245,16 @@ void main() {
 
   testWidgets('pending login uses the shared dumbbell loader', (tester) async {
     const channel = MethodChannel('plugins.flutter.io/local_auth');
-    final completion = Completer<bool>();
+    final completion = Completer<void>();
     final messenger = tester.binding.defaultBinaryMessenger;
-    messenger.setMockMethodCallHandler(channel, (_) => completion.future);
+    messenger.setMockMethodCallHandler(channel, (_) async => false);
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
-    await tester.pumpWidget(const GymManagementApp());
+    final fixture = ApiFixture()
+      ..allowLogin = false
+      ..loginBarrier = completion.future;
+    final api = RepLabApi(client: fixture.client);
+    addTearDown(api.dispose);
+    await tester.pumpWidget(GymManagementApp(api: api));
     await tester.pumpAndSettle();
     await enterServerLogin(tester);
     await tester.tap(find.text('Login'));
@@ -256,10 +262,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     expect(find.byType(DumbbellLoader), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
-    completion.complete(false);
+    completion.complete();
     await tester.pumpAndSettle();
     expect(find.byType(DumbbellLoader), findsNothing);
-    expect(find.text('Authentication was not completed.'), findsOneWidget);
+    expect(find.text('Server password is incorrect.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

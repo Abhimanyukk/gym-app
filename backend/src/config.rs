@@ -11,6 +11,8 @@ use std::{
     time::Duration,
 };
 
+pub const API_PORT: u16 = 8443;
+
 #[derive(Clone)]
 pub struct Config {
     pub bind: SocketAddr,
@@ -25,9 +27,6 @@ impl Config {
     pub fn from_env(http: bool) -> anyhow::Result<Self> {
         let ip: IpAddr = env::var("API_BIND_IP")
             .unwrap_or_else(|_| "127.0.0.1".into())
-            .parse()?;
-        let port = env::var("API_PORT")
-            .unwrap_or_else(|_| "8443".into())
             .parse()?;
         if http && !ip.is_loopback() {
             bail!("Unencrypted HTTP is permitted only on loopback.");
@@ -44,7 +43,7 @@ impl Config {
             bail!("Hosts and origins must be explicit; wildcards are not permitted.");
         }
         Ok(Self {
-            bind: SocketAddr::new(ip, port),
+            bind: SocketAddr::new(ip, API_PORT),
             hosts,
             origins,
             http,
@@ -110,7 +109,7 @@ pub fn configure(directory: &Path, ip: IpAddr) -> anyhow::Result<()> {
     write_private(
         &runtime,
         &format!(
-            "{common}POSTGRES_USER=replab_app\nPOSTGRES_PASSWORD={app_password}\nAPI_BIND_IP={ip}\nAPI_PORT=8443\n\
+            "{common}POSTGRES_USER=replab_app\nPOSTGRES_PASSWORD={app_password}\nAPI_BIND_IP={ip}\n\
         ALLOWED_HOSTS=localhost,127.0.0.1,{ip}\nCORS_ORIGINS=\n\
         TLS_CERT_PATH=/etc/replab/server.crt\nTLS_KEY_PATH=/etc/replab/server.key\n"
         ),

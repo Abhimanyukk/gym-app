@@ -32,6 +32,8 @@ void main() {
     await enterServerLogin(tester);
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('setup-skip-biometrics')));
+    await tester.pumpAndSettle();
     return (fixture, api);
   }
 
@@ -48,10 +50,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('nav-Settings')));
     await tester.pumpAndSettle();
     expect(find.text('0 of 3 admin slots used'), findsNothing);
-    expect(
-      find.text('Admin records unavailable · Maximum 3 admins'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Cannot reach the server'), findsOneWidget);
     api.clearSession();
   });
 
@@ -173,84 +172,50 @@ void main() {
     },
   );
 
-  testWidgets(
-    'settings save, real admin cap, password change revokes session',
-    (tester) async {
-      final (fixture, _) = await signIn(tester);
-      await tester.tap(find.byKey(const ValueKey('nav-Settings')));
-      await tester.pumpAndSettle();
-      expect(find.text('1 of 3 admin slots used'), findsOneWidget);
-      final edit = find.byKey(const ValueKey('settings-edit-preferences'));
-      await tester.ensureVisible(edit);
-      await tester.tap(edit);
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('settings-gym-name')),
-        'Updated server gym',
-      );
-      await tester.tap(find.byKey(const ValueKey('settings-dialog-save')));
-      await tester.pumpAndSettle();
-      expect(fixture.settings['gym_name'], 'Updated server gym');
-      for (var n = 2; n <= 3; n++) {
-        final add = find.byKey(const ValueKey('settings-add-admin'));
-        await tester.ensureVisible(add);
-        await tester.tap(add);
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const ValueKey('settings-admin-name')),
-          'Admin $n',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('settings-admin-email')),
-          'admin$n@example.com',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('settings-new-password')),
-          'synthetic admin password',
-        );
-        await tester.enterText(
-          find.byKey(const ValueKey('settings-confirm-password')),
-          'synthetic admin password',
-        );
-        await tester.tap(find.byKey(const ValueKey('settings-dialog-save')));
-        await tester.pumpAndSettle();
-      }
-      expect(find.text('3 of 3 admin slots used'), findsOneWidget);
-      expect(
-        tester
-            .widget<FilledButton>(
-              find.byKey(const ValueKey('settings-add-admin')),
-            )
-            .onPressed,
-        isNull,
-      );
-      final change = find.byKey(const ValueKey('settings-change-password'));
-      await tester.ensureVisible(change);
-      await tester.tap(change);
-      await tester.pumpAndSettle();
-      await tester.enterText(
-        find.byKey(const ValueKey('settings-current-password')),
-        'synthetic old password',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('settings-new-password')),
-        'synthetic new password',
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('settings-confirm-password')),
-        'synthetic new password',
-      );
-      await tester.tap(find.byKey(const ValueKey('settings-dialog-save')));
-      await tester.pumpAndSettle();
-      expect(find.byType(SplashScreen), findsOneWidget);
-      expect(
-        find.textContaining('All your sessions were revoked'),
-        findsOneWidget,
-      );
-      expect(find.byKey(const ValueKey('settings-dialog')), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('settings save and password change revokes session', (
+    tester,
+  ) async {
+    final (fixture, _) = await signIn(tester);
+    await tester.tap(find.byKey(const ValueKey('nav-Settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-add-admin')), findsNothing);
+    final edit = find.byKey(const ValueKey('settings-edit-preferences'));
+    await tester.ensureVisible(edit);
+    await tester.tap(edit);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-gym-name')),
+      'Updated server gym',
+    );
+    await tester.tap(find.byKey(const ValueKey('settings-dialog-save')));
+    await tester.pumpAndSettle();
+    expect(fixture.settings['gym_name'], 'Updated server gym');
+    final change = find.byKey(const ValueKey('settings-change-password'));
+    await tester.ensureVisible(change);
+    await tester.tap(change);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-current-password')),
+      'synthetic old password',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-new-password')),
+      'synthetic new password',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('settings-confirm-password')),
+      'synthetic new password',
+    );
+    await tester.tap(find.byKey(const ValueKey('settings-dialog-save')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SplashScreen), findsOneWidget);
+    expect(
+      find.textContaining('All your sessions were revoked'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('settings-dialog')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'offline refresh keeps old data; revocation closes details and returns to login',

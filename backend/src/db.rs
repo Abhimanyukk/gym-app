@@ -15,9 +15,14 @@ pub async fn migrate(pool: &PgPool) -> anyhow::Result<()> {
         let versions: Vec<i16> = sqlx::query_scalar("SELECT version FROM replab_schema")
             .fetch_all(&mut *tx)
             .await?;
+        if versions == vec![2] {
+            tx.commit().await?;
+            return Ok(());
+        }
         if versions != vec![1] {
             bail!("Unsupported schema version; nothing was changed.");
         }
+        single_admin(&mut tx).await?;
         tx.commit().await?;
         return Ok(());
     }
@@ -80,7 +85,26 @@ pub async fn migrate(pool: &PgPool) -> anyhow::Result<()> {
     )
     .execute(&mut *tx)
     .await?;
+    single_admin(&mut tx).await?;
     tx.commit().await?;
-    println!("Schema 1 ready. No destructive downgrade command exists.");
+    println!("Schema 2 ready. Existing passwords and business records are preserved.");
+    Ok(())
+}
+
+async fn single_admin(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> anyhow::Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(73421001)")
+        .execute(&mut **tx)
+        .await?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM admins")
+        .fetch_one(&mut **tx)
+        .await?;
+    if count > 1 {
+        bail!(
+            "More than one admin exists; migration refused. Choose an account explicitly; no accounts were deleted."
+        );
+    }
+    sqlx::raw_sql(include_str!("../migrations/0002_single_admin.sql"))
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }

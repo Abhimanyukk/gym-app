@@ -9,18 +9,18 @@ a{color:#a4dcab}table{width:100%}
 <p>All API routes except login require <code>Authorization: Bearer &lt;access_token&gt;</code>.</p>
 <table><tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
 <tr><td>GET</td><td>/health/live, /health/ready</td><td>Process/database health</td></tr>
-<tr><td>POST</td><td>/api/v1/auth/login</td><td>Email/password login</td></tr>
+<tr><td>POST</td><td>/api/v1/auth/login</td><td>Server password only</td></tr>
 <tr><td>GET</td><td>/api/v1/auth/me</td><td>Current administrator</td></tr>
+<tr><td>POST</td><td>/api/v1/auth/resume</td><td>Verify remembered key; renew 90-day idle lifetime</td></tr>
 <tr><td>POST</td><td>/api/v1/auth/logout</td><td>Revoke current session</td></tr>
 <tr><td>POST</td><td>/api/v1/auth/change-password</td><td>Verify current password; revoke all own sessions</td></tr>
-<tr><td>GET, POST</td><td>/api/v1/admins</td><td>List/create administrators (maximum 3)</td></tr>
+<tr><td>GET, POST</td><td>/api/v1/admins</td><td>Legacy account API; second-admin creation refused</td></tr>
 <tr><td>GET, PUT</td><td>/api/v1/settings</td><td>Read/replace gym settings</td></tr>
 <tr><td>GET, POST</td><td>/api/v1/members</td><td>Directory/registration</td></tr>
 <tr><td>GET</td><td>/api/v1/members/{uuid}</td><td>Basic profile</td></tr>
 <tr><td>GET</td><td>/api/v1/dashboard/summary</td><td>Real registered-member counts</td></tr></table>
 <h2>Request bodies</h2>
-<pre>Login: {"email":"admin@example.com","password":"your password"}
-Add admin: {"name":"Admin Name","email":"admin@example.com","password":"15+ characters"}
+<pre>Login: {"password":"your password"}
 Password change: {"current_password":"...","new_password":"15+ characters"}
 Settings: {"gym_name":"Gym Name","phone":"","address":""}
 Member: {"name":"Member Name","phone":"+91 9876543210"}</pre>
@@ -29,8 +29,12 @@ Joining date defaults to today's IST date and cannot be in the future.</p>
 <p>Directory query parameters: <code>q</code> (name/phone/exact member number),
 <code>active</code> (record status), <code>limit</code> (1–100, default 50), <code>offset</code> (nonnegative).
 Responses include <code>items, total, limit, offset</code>.</p>
-<p>Login returns <code>access_token, token_type, expires_at, admin</code>. Sessions last eight hours.
-There are no default credentials. The server executable's <code>create-admin</code> command initializes the first account.</p>
+<p>Login returns <code>access_token, token_type, expires_at, admin</code>. Sessions have a 90-day idle lifetime.
+Resume has no body and returns <code>expires_at, admin</code> after verifying the saved bearer key.
+Only key hashes are stored on the server. Sign-out revokes the current key; password changes revoke all keys.</p>
+<p>There is one administrator, no default password, and no username/email requirement.
+The executable's <code>create-admin</code> command prompts for password and confirmation only.
+HTTPS port <code>8443</code> is fixed in the app and server. Readiness requires schema <code>2</code>.</p>
 <p>Error format: <code>{"error":{"code":"...","message":"..."}}</code>. Request IDs are in
 <code>X-Request-ID</code>. Login rate-limit responses include <code>Retry-After</code>.</p>
 <p>Attendance, subscriptions, billing and terminal integration are not available yet.

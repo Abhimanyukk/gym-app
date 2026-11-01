@@ -15,7 +15,9 @@ SELECT count(*) AS settings FROM gym_settings;
 DO $$
 BEGIN
   IF to_regclass('public.replab_schema') IS NOT NULL THEN
-    IF (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[1]::smallint[] THEN RAISE EXCEPTION 'Unknown schema'; END IF;
+    IF (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[1]::smallint[]
+       AND (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[2]::smallint[]
+       THEN RAISE EXCEPTION 'Unknown schema'; END IF;
   ELSIF to_regclass('public.alembic_version') IS NOT NULL THEN
     IF (SELECT array_agg(version_num::text) FROM alembic_version) IS DISTINCT FROM ARRAY['0001']::text[] THEN RAISE EXCEPTION 'Unknown legacy schema'; END IF;
   ELSE RAISE EXCEPTION 'No known migration marker';

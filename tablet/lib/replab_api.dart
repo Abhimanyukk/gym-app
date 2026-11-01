@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_transport.dart';
+import 'device_session.dart';
 import 'member_profile.dart';
 
 typedef AdminAccount = ({String id, String name, String email});
@@ -28,42 +29,53 @@ String? apiAddressError(String? text) {
       uri.hasQuery ||
       uri.hasFragment ||
       (uri.path.isNotEmpty && uri.path != '/') ||
-      uri.port < 1 ||
-      uri.port > 65535 ||
+      uri.port != serverPort ||
       RegExp(r'\s').hasMatch(text ?? '')) {
-    return 'Enter an HTTPS server address, e.g. https://192.168.1.50:8443';
+    return 'Invalid server connection. Enter only the hostname or IP in setup.';
   }
   return null;
 }
 
-/// One REST/session boundary. Tokens live in memory only, never preferences/logs.
-/// dover-gain-efficient: sign in after restart; add secure persistence only if needed.
+/// One REST boundary. DeviceSession persists the key in encrypted native storage,
+/// never the password. Web preview keeps bearer keys in memory only.
 class RepLabApi extends ChangeNotifier {
   RepLabApi({http.Client? client, this.timeout = const Duration(seconds: 20)})
     // Keep the injectable parameter public while the transport stays private.
     // ignore: prefer_initializing_formals
-    : _client = client;
+    : _client = client,
+      _injectedClient = client;
   http.Client? _client;
+  final http.Client? _injectedClient;
+  DateTime? _expiresAt;
   final Duration timeout;
   Uri? _base;
   String? _token;
   Timer? _expiry;
+  bool _published = false;
   bool _disposed = false;
   AdminAccount? admin;
   String? sessionMessage;
 
-  bool get signedIn => _token != null;
+  bool get signedIn => _token != null && _published;
+  String? get sessionKey => _token;
   String get baseUrl => _base?.toString() ?? '';
 
-  Future<void> login(String url, String email, String password) async {
+  Future<void> login(String url, String password, {bool notify = true}) async {
     final error = apiAddressError(url);
     if (error != null) throw ApiException(error);
     clearSession();
     _base = Uri.parse(url.trim()).replace(path: '');
+    final health = await request('GET', '/health/ready', authenticated: false);
+    if (health is! Map || health['schema'] != '2') {
+      throw const ApiException(
+        'Update the gym server to RepLab 0.3 and run its migration before setting up this app.',
+        code: 'server_update_required',
+      );
+    }
     final value = await request(
       'POST',
       '/api/v1/auth/login',
-      body: {'email': email.trim(), 'password': password},
+      body: {'password': password},
       authenticated: false,
     );
     if (_disposed) return;
@@ -84,12 +96,74 @@ class RepLabApi extends ChangeNotifier {
       throw const ApiException('Invalid server session. Please sign in again.');
     }
     _token = token;
+    _expiresAt = expires;
     admin = account;
     sessionMessage = null;
     _expiry = Timer(expires.difference(DateTime.now().toUtc()), () {
       clearSession('Your session expired. Please sign in again.');
     });
-    if (!_disposed) notifyListeners();
+    if (notify) publishSession();
+  }
+
+  Future<void> resume(String url, String key) async {
+    if (apiAddressError(url) != null || key.isEmpty) {
+      throw const ApiException('Invalid saved session.');
+    }
+    _base = Uri.parse(url).replace(path: '');
+    _token = key;
+    try {
+      final data =
+          await request('POST', '/api/v1/auth/resume') as Map<String, dynamic>;
+      admin = parseAdmin(data['admin'] as Map<String, dynamic>);
+      final expires = DateTime.parse(data['expires_at'] as String).toUtc();
+      _expiresAt = expires;
+      if (!expires.isAfter(DateTime.now().toUtc())) {
+        throw const ApiException(
+          'Saved session expired.',
+          code: 'unauthorized',
+        );
+      }
+      _expiry?.cancel();
+      _expiry = Timer(
+        expires.difference(DateTime.now().toUtc()),
+        () => clearSession('Session expired. Connect again.'),
+      );
+      sessionMessage = null;
+      publishSession();
+    } catch (_) {
+      _token = null;
+      _published = false;
+      admin = null;
+      rethrow;
+    }
+  }
+
+  void publishSession() {
+    if (!_disposed && _token != null) {
+      _published = true;
+      notifyListeners();
+    }
+  }
+
+  RepLabApi newConnection() =>
+      RepLabApi(client: _injectedClient, timeout: timeout);
+  void adoptSession(RepLabApi other) {
+    if (other._token == null ||
+        other.admin == null ||
+        other._expiresAt == null) {
+      throw const ApiException('New server session is not valid.');
+    }
+    _base = other._base;
+    _token = other._token;
+    admin = other.admin;
+    _expiresAt = other._expiresAt;
+    _expiry?.cancel();
+    _expiry = Timer(
+      _expiresAt!.difference(DateTime.now().toUtc()),
+      () => clearSession('Session expired. Connect again.'),
+    );
+    sessionMessage = null;
+    publishSession();
   }
 
   static AdminAccount parseAdmin(Map<String, dynamic> value) => (
@@ -105,15 +179,16 @@ class RepLabApi extends ChangeNotifier {
     Map<String, String>? query,
     bool authenticated = true,
   }) async {
-    if (_disposed || _base == null || (authenticated && !signedIn)) {
+    if (_disposed || _base == null || (authenticated && _token == null)) {
       throw const ApiException('Please sign in to the gym server.');
     }
     final token = _token;
-    final mutation = method != 'GET';
+    final base = _base!;
+    final mutation = method != 'GET' && !path.startsWith('/api/v1/auth/');
     http.Response response;
     try {
       _client ??= await createApiClient();
-      final uri = _base!.replace(path: path, queryParameters: query);
+      final uri = base.replace(path: path, queryParameters: query);
       final req = http.Request(method, uri)
         ..followRedirects = false
         ..headers['Accept'] = 'application/json';
@@ -257,6 +332,7 @@ class RepLabApi extends ChangeNotifier {
   void clearSession([String? message]) {
     _expiry?.cancel();
     _token = null;
+    _published = false;
     admin = null;
     sessionMessage = message;
     if (!_disposed) notifyListeners();
@@ -266,7 +342,7 @@ class RepLabApi extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _expiry?.cancel();
-    _client?.close();
+    if (_injectedClient == null) _client?.close();
     _token = null;
     admin = null;
     super.dispose();

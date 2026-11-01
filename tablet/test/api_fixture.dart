@@ -6,14 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> enterServerLogin(WidgetTester tester) async {
-  await tester.enterText(
-    find.byKey(const ValueKey('login-server')),
-    'https://localhost:8001',
-  );
-  await tester.enterText(
-    find.byKey(const ValueKey('login-email')),
-    'admin@example.com',
-  );
+  if (find.byKey(const ValueKey('setup-next')).evaluate().isNotEmpty) {
+    await tester.tap(find.text('Hostname'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('server-hostname')),
+      'localhost',
+    );
+    await tester.tap(find.byKey(const ValueKey('setup-next')));
+    await tester.pumpAndSettle();
+  }
   await tester.enterText(
     find.byKey(const ValueKey('login-password')),
     'synthetic test password',
@@ -23,18 +25,21 @@ Future<void> enterServerLogin(WidgetTester tester) async {
 
 /// Synthetic API contract only; production code never imports this fixture.
 class ApiFixture {
+  ApiFixture({this.sessionToken = 'synthetic-session-token'});
+  final String sessionToken;
   final requests = <http.Request>[];
   bool allowLogin = true;
   bool expired = false;
   bool failWrites = false;
   bool failReads = false;
   Future<void>? writeBarrier;
+  Future<void>? loginBarrier;
   Map<String, dynamic> settings = {
     'gym_name': 'Server Gym',
     'phone': '',
     'address': '',
     'timezone': 'Asia/Kolkata',
-    'max_admins': 3,
+    'max_admins': 1,
   };
   final admins = <Map<String, dynamic>>[
     {
@@ -71,25 +76,29 @@ class ApiFixture {
         ? <String, dynamic>{}
         : jsonDecode(request.body) as Map<String, dynamic>;
     if (path == '/api/v1/auth/login') {
+      if (loginBarrier != null) await loginBarrier;
       if (!allowLogin) {
         return error(
           'invalid_credentials',
-          'Email or password is incorrect.',
+          'Server password is incorrect.',
           401,
         );
       }
       return json({
-        'access_token': 'synthetic-session-token',
+        'access_token': sessionToken,
         'token_type': 'bearer',
         'expires_at': DateTime.now()
             .toUtc()
-            .add(const Duration(hours: 8))
+            .add(const Duration(days: 90))
             .toIso8601String(),
         'admin': admins.first,
       });
     }
+    if (path == '/health/ready') {
+      return json({'status': 'ready', 'schema': '2', 'database': 'ok'});
+    }
     if (expired) return error('unauthorized', 'Authentication required.', 401);
-    if (request.headers['Authorization'] != 'Bearer synthetic-session-token') {
+    if (request.headers['Authorization'] != 'Bearer $sessionToken') {
       return error('unauthorized', 'Authentication required.', 401);
     }
     if (request.method != 'GET' && writeBarrier != null) {
@@ -101,7 +110,15 @@ class ApiFixture {
     if (failWrites && request.method != 'GET') {
       return error('internal_error', 'Server error.', 500);
     }
-    if (path == '/health/ready') return json({'status': 'ready'});
+    if (path == '/api/v1/auth/resume') {
+      return json({
+        'admin': admins.first,
+        'expires_at': DateTime.now()
+            .toUtc()
+            .add(const Duration(days: 90))
+            .toIso8601String(),
+      });
+    }
     if (path == '/api/v1/dashboard/summary') {
       return json({
         'total_members': members.length,
@@ -113,8 +130,12 @@ class ApiFixture {
     }
     if (path == '/api/v1/admins') {
       if (request.method == 'POST') {
-        if (admins.length >= 3) {
-          return error('admin_limit', 'Maximum of 3 admins reached.', 409);
+        if (admins.isNotEmpty) {
+          return error(
+            'admin_limit',
+            'Only one server administrator is allowed.',
+            409,
+          );
         }
         admins.add({
           'id': 'admin-${admins.length}',

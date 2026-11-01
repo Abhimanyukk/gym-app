@@ -16,17 +16,13 @@ void main() {
     () async {
       expect(
         url,
-        'https://localhost:9443',
+        'https://localhost:8443',
         reason: 'Never point integration tests at the deployment API.',
       );
       final api = RepLabApi();
       addTearDown(api.dispose);
       await expectLater(
-        api.login(
-          url,
-          'not-registered@example.com',
-          'synthetic transport test password',
-        ),
+        api.login(url, 'synthetic transport test password'),
         throwsA(
           isA<ApiException>().having(
             (e) => e.code,
@@ -41,7 +37,7 @@ void main() {
         authenticated: false,
       );
       expect(ready, containsPair('database', 'ok'));
-      expect(ready, containsPair('schema', '1'));
+      expect(ready, containsPair('schema', '2'));
       expect(api.signedIn, isFalse);
     },
     skip: url.isEmpty
@@ -54,14 +50,14 @@ void main() {
     () async {
       expect(
         url,
-        'https://localhost:9443',
+        'https://localhost:8443',
         reason: 'Use only the isolated replab_test fixture.',
       );
       final api = RepLabApi();
       addTearDown(api.dispose);
       const current = 'synthetic tablet integration password';
       const next = 'synthetic changed integration password';
-      await api.login(url, 'tablet-test@example.com', current);
+      await api.login(url, current);
       expect(api.admin?.name, 'Tablet Test Admin');
       final before = await api.members();
       final saved = await api.addMember({
@@ -87,24 +83,14 @@ void main() {
         'Test address',
       );
       expect((await api.settings())['gym_name'], 'Synthetic tablet gym');
-      await api.addAdmin(
-        'Synthetic admin 2',
-        'tablet-admin2@example.com',
-        current,
-      );
-      await api.addAdmin(
-        'Synthetic admin 3',
-        'tablet-admin3@example.com',
-        current,
-      );
-      expect((await api.admins()).length, 3);
+      expect((await api.admins()).length, 1);
       await expectLater(
-        api.addAdmin('Synthetic admin 4', 'tablet-admin4@example.com', current),
+        api.addAdmin('Synthetic admin 2', 'tablet-admin2@example.com', current),
         throwsA(isA<ApiException>()),
       );
       await api.changePassword(current, next);
       expect(api.signedIn, isFalse);
-      await api.login(url, 'tablet-test@example.com', next);
+      await api.login(url, next);
       await api.logout();
       expect(api.signedIn, isFalse);
     },

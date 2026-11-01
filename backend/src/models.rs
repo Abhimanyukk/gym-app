@@ -15,7 +15,10 @@ pub struct Admin {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoginInput {
-    pub email: String,
+    // Transitional compatibility for the already-installed v0.2 APK. Not used
+    // to select an account; the new app sends only the password.
+    #[serde(default, rename = "email")]
+    pub _legacy_email: Option<String>,
     pub password: String,
 }
 

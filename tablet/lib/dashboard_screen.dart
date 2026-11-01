@@ -11,12 +11,19 @@ import 'members_page.dart';
 import 'settings_page.dart';
 import 'settings_preview.dart';
 import 'replab_api.dart';
+import 'device_session.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.showSampleData = false, this.api});
+  const DashboardScreen({
+    super.key,
+    this.showSampleData = false,
+    this.api,
+    this.device,
+  });
 
   final bool showSampleData;
   final RepLabApi? api;
+  final DeviceSession? device;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -221,6 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             _ => SettingsPage(
                               preview: _settings,
                               api: widget.api,
+                              device: widget.device,
                             ),
                           },
                         )

@@ -7,12 +7,7 @@ use replab_server::{
     models::AdminInput,
     services,
 };
-use std::{
-    io::{self, Write},
-    net::IpAddr,
-    path::PathBuf,
-    time::Duration,
-};
+use std::{net::IpAddr, path::PathBuf, time::Duration};
 
 #[derive(Parser)]
 #[command(version, about = "RepLab native Rust gym server")]
@@ -71,15 +66,8 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::new(pool, config).await?;
     match cli.command {
         Command::CreateAdmin => {
-            fn prompt(label: &str) -> anyhow::Result<String> {
-                print!("{label}");
-                io::stdout().flush()?;
-                let mut value = String::new();
-                io::stdin().read_line(&mut value)?;
-                Ok(value.trim().to_owned())
-            }
-            let name = prompt("Initial admin's full name: ")?;
-            let email = prompt("Initial admin's email: ")?;
+            let name = "Gym Admin".to_owned();
+            let email = "admin@replab.invalid".to_owned(); // Legacy metadata, not a login identifier.
             let password = rpassword::prompt_password("Password (15-128 characters): ")?;
             let confirmation = rpassword::prompt_password("Confirm password: ")?;
             anyhow::ensure!(

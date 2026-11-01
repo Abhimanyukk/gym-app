@@ -73,7 +73,7 @@ async fn sign_in(app: &Router, password: &str) -> String {
         "POST",
         "/api/v1/auth/login",
         None,
-        Some(json!({"email":"owner@example.com","password":password})),
+        Some(json!({"password":password})),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -82,6 +82,7 @@ async fn sign_in(app: &Router, password: &str) -> String {
 
 #[tokio::test]
 async fn postgres_api_contract_security_and_legacy_adoption() {
+    assert_eq!(Config::from_env(true).unwrap().bind.port(), 8443);
     // No fixture reset/migration may ever touch the deployment DB.
     assert_eq!(
         env::var("POSTGRES_DB").as_deref(),
@@ -92,7 +93,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     let superuser = pool("postgres", &env::var("TEST_ADMIN_PASSWORD").unwrap()).await;
     let runtime = pool("replab_app", &env::var("POSTGRES_PASSWORD").unwrap()).await;
     let config = Config {
-        bind: "127.0.0.1:8001".parse().unwrap(),
+        bind: "127.0.0.1:8443".parse().unwrap(),
         hosts: vec!["localhost".into()],
         origins: vec!["http://localhost:8080".into()],
         cert: "unused".into(),
@@ -127,7 +128,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     db::migrate(&owner).await.unwrap();
     assert_eq!(
         call(&app, "GET", "/health/ready", None, None).await.1["schema"],
-        "1"
+        "2"
     );
     for sql in [
         "CREATE TABLE should_not_exist(id integer)",
@@ -223,7 +224,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
             other => panic!("unexpected status {other}"),
         }
     }
-    assert_eq!((created, rejected), (2, 2));
+    assert_eq!((created, rejected), (0, 4));
     let duplicate = call(
         &app,
         "POST",
@@ -240,7 +241,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
             .to_string()
             .contains("password")
     );
-    assert!(sqlx::query("INSERT INTO admins(id,slot,name,email,password_hash) VALUES($1,4,'Blocked','fourth@example.com','invalid')")
+    assert!(sqlx::query("INSERT INTO admins(id,slot,name,email,password_hash) VALUES($1,2,'Blocked','second@example.com','invalid')")
         .bind(uuid::Uuid::new_v4()).execute(&owner).await.is_err());
 
     let settings = call(
@@ -253,6 +254,17 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     .await;
     assert_eq!(settings.0, StatusCode::OK);
     assert_eq!(settings.1["timezone"], "Asia/Kolkata");
+    assert_eq!(settings.1["max_admins"], 1);
+    let resumed = call(&app, "POST", "/api/v1/auth/resume", Some(&token), None).await;
+    assert_eq!(resumed.0, StatusCode::OK, "{}", resumed.1);
+    assert_eq!(resumed.1["admin"]["email"], "owner@example.com");
+    let expires: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT expires_at FROM login_sessions WHERE token_hash=$1")
+            .bind(replab_server::security::digest(&token))
+            .fetch_one(&owner)
+            .await
+            .unwrap();
+    assert!(expires > chrono::Utc::now() + chrono::Duration::days(89));
     let mut member_id = String::new();
     for (name, active) in [("Alice Test", true), ("Bob Test", false)] {
         let result = call(
@@ -437,6 +449,12 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
                 .0,
             StatusCode::UNAUTHORIZED
         );
+        assert_eq!(
+            call(&app, "POST", "/api/v1/auth/resume", Some(token), None)
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
     }
     let new = sign_in(&app, changed).await;
     assert_eq!(
@@ -551,6 +569,38 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
             .1["gym_name"],
         "Test Gym"
     );
+    // A schema-1 installation with multiple admins is refused atomically.
+    // Only this isolated test superuser may add/remove the synthetic account.
+    sqlx::raw_sql(
+        "ALTER TABLE admins DROP CONSTRAINT ck_admin_slot;
+        ALTER TABLE admins ADD CONSTRAINT ck_admin_slot CHECK(slot BETWEEN 1 AND 3);
+        UPDATE replab_schema SET version=1;",
+    )
+    .execute(&superuser)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO admins(id,slot,name,email,password_hash) VALUES($1,2,'Extra fixture','extra@example.com','fixture')")
+        .bind(uuid::Uuid::new_v4()).execute(&superuser).await.unwrap();
+    assert!(db::migrate(&owner).await.is_err());
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM admins")
+            .fetch_one(&owner)
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i16>("SELECT version FROM replab_schema")
+            .fetch_one(&owner)
+            .await
+            .unwrap(),
+        1
+    );
+    sqlx::query("DELETE FROM admins WHERE slot=2")
+        .execute(&superuser)
+        .await
+        .unwrap();
+    db::migrate(&owner).await.unwrap();
     println!(
         "PostgreSQL API, permissions, validation, audit rollback, session/rate persistence and legacy adoption passed."
     );

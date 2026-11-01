@@ -1,8 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:gym_management_app/dashboard_screen.dart';
+import 'package:gym_management_app/device_session.dart';
 import 'package:gym_management_app/main.dart';
-import 'package:gym_management_app/settings_preview.dart';
+import 'package:gym_management_app/replab_api.dart';
+
+import 'api_fixture.dart';
 
 Future<void> openSettings(WidgetTester tester, {bool preview = true}) async {
   await tester.pumpWidget(
@@ -13,13 +20,6 @@ Future<void> openSettings(WidgetTester tester, {bool preview = true}) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> enterSetting(WidgetTester tester, String key, String value) async {
-  final field = find.byKey(ValueKey(key));
-  await tester.ensureVisible(field);
-  await tester.enterText(field, value);
-  await tester.pumpAndSettle();
-}
-
 Future<void> tapSetting(WidgetTester tester, String key) async {
   final button = find.byKey(ValueKey(key));
   await tester.ensureVisible(button);
@@ -27,307 +27,166 @@ Future<void> tapSetting(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> enterSetting(WidgetTester tester, String key, String value) async {
+  final field = find.byKey(ValueKey(key));
+  await tester.ensureVisible(field);
+  await tester.enterText(field, value);
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  test(
-    'shared admin state rejects duplicates, a fourth admin and live changes',
-    () {
-      final state = SettingsPreview(enabled: true);
-      expect(state.admins.length, 1);
-      expect(
-        state.addAdmin((name: 'Duplicate', email: ' ADMIN@example.com ')),
-        'An admin with this email already exists',
+  testWidgets(
+    'server changes verify independently and preserve the old connection on failure',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final oldServer = ApiFixture();
+      final newServer = ApiFixture(
+        sessionToken: 'synthetic-new-server-session',
       );
-      expect(state.addAdmin((name: 'Test', email: 'bad')), isNotNull);
-      expect(state.addAdmin((name: '', email: 'valid@example.com')), isNotNull);
-      for (var index = 2; index <= 3; index++) {
-        expect(
-          state.addAdmin((
-            name: 'Admin $index',
-            email: 'admin$index@example.com',
-          )),
-          isNull,
-        );
-      }
-      expect(state.canAddAdmin, isFalse);
-      expect(
-        state.addAdmin((name: 'Fourth', email: 'fourth@example.com')),
-        'Maximum of 3 admins reached.',
+      final api = RepLabApi(
+        client: MockClient((request) async {
+          final server = request.url.host == 'localhost'
+              ? oldServer
+              : newServer;
+          final copy = http.Request(request.method, request.url)
+            ..headers.addAll(request.headers)
+            ..bodyBytes = request.bodyBytes;
+          return http.Response.fromStream(await server.client.send(copy));
+        }),
       );
-      expect(state.admins.length, 3);
-      expect(() => state.admins.clear(), throwsUnsupportedError);
-      final live = SettingsPreview();
-      expect(live.admins, isEmpty);
-      expect(
-        live.addAdmin((name: 'Test', email: 'test@example.com')),
-        isNotNull,
+      String? stored;
+      var storageFails = false;
+      final device = DeviceSession(
+        read: () async => stored,
+        write: (value) async {
+          if (storageFails) throw StateError('Synthetic storage failure');
+          stored = value;
+        },
       );
-      expect(live.admins, isEmpty);
+      await api.login('https://localhost:8443', 'synthetic');
+      await device.save(
+        host: 'localhost',
+        token: api.sessionKey,
+        biometrics: false,
+      );
+      await tester.pumpWidget(GymManagementApp(api: api, device: device));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('nav-Settings')));
+      await tester.pumpAndSettle();
+      await tapSetting(tester, 'settings-advanced');
+      await tapSetting(tester, 'settings-change-server');
+      await enterSetting(tester, 'server-hostname', 'lovin.local');
+      await enterSetting(tester, 'settings-server-password', 'synthetic');
+      newServer.allowLogin = false;
+      await tapSetting(tester, 'settings-dialog-save');
+      expect(find.text('Server password is incorrect.'), findsOneWidget);
+      expect(api.baseUrl, 'https://localhost:8443');
+      expect(device.host, 'localhost');
+      newServer.allowLogin = true;
+      storageFails = true;
+      await tapSetting(tester, 'settings-dialog-save');
+      expect(api.baseUrl, 'https://localhost:8443');
+      expect(device.token, oldServer.sessionToken);
+      expect(jsonDecode(stored!)['host'], 'localhost');
+      storageFails = false;
+      await tapSetting(tester, 'settings-dialog-save');
+      expect(api.baseUrl, 'https://lovin.local:8443');
+      expect(device.host, 'lovin.local');
+      expect(jsonDecode(stored!)['token'], newServer.sessionToken);
+      expect(
+        newServer.requests.every(
+          (r) =>
+              !r.headers.values.any((v) => v.contains(oldServer.sessionToken)),
+        ),
+        true,
+      );
+      await api.dashboard();
+      expect(
+        newServer.requests.last.headers['Authorization'],
+        'Bearer ${newServer.sessionToken}',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      api.dispose();
+      expect(tester.takeException(), isNull);
     },
   );
-
-  test('server preferences reject credentials and malformed addresses', () {
-    for (final address in [
-      '',
-      'https://gym.example',
-      'http://192.168.1.4:8000/api',
-    ]) {
-      expect(serverAddressError(address), isNull);
-    }
-    for (final address in [
-      '192.168.1.4',
-      'ftp://gym.example',
-      'https://user:password@gym.example',
-      'https://gym.example?token=secret',
-      'https://gym.example#secret',
-      'https://gym.example:99999',
-      'https://gym .example',
-    ]) {
-      expect(serverAddressError(address), isNotNull, reason: address);
-    }
-  });
-
-  testWidgets('add admin validates identity and passwords and caps at three', (
+  testWidgets('single admin, advanced connection separated from gym details', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1600, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await openSettings(tester);
-    expect(find.text('1 of 3 admin slots used'), findsOneWidget);
-    await tapSetting(tester, 'settings-add-admin');
+    expect(find.byKey(const ValueKey('settings-add-admin')), findsNothing);
+    await tapSetting(tester, 'settings-edit-preferences');
+    expect(find.byKey(const ValueKey('settings-server-url')), findsNothing);
+    await enterSetting(tester, 'settings-gym-name', '');
     await tapSetting(tester, 'settings-dialog-save');
-    expect(find.text('Enter the admin’s full name'), findsOneWidget);
-    expect(find.text('Enter a valid email address'), findsOneWidget);
-    expect(find.text('Use 15–128 characters'), findsOneWidget);
-    await enterSetting(tester, 'settings-admin-name', 'Test Admin Two');
-    await enterSetting(tester, 'settings-admin-email', 'ADMIN@example.com');
-    await enterSetting(tester, 'settings-new-password', 'preview password two');
-    await enterSetting(
-      tester,
-      'settings-confirm-password',
-      'different password',
-    );
+    expect(find.text('Enter the gym name'), findsOneWidget);
+    await enterSetting(tester, 'settings-gym-name', 'Preview Gym');
     await tapSetting(tester, 'settings-dialog-save');
-    expect(
-      find.text('An admin with this email already exists'),
-      findsOneWidget,
-    );
-    expect(find.text('Passwords do not match'), findsOneWidget);
-    await enterSetting(tester, 'settings-admin-email', 'two@example.com');
-    await enterSetting(
-      tester,
-      'settings-confirm-password',
-      'preview password two',
-    );
-    await tapSetting(tester, 'settings-dialog-save');
-    expect(find.text('2 of 3 admin slots used'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('nav-Members')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('nav-Settings')));
-    await tester.pumpAndSettle();
-    expect(find.text('Test Admin Two'), findsOneWidget);
-    await tapSetting(tester, 'settings-add-admin');
-    await enterSetting(tester, 'settings-admin-name', 'Test Admin Three');
-    await enterSetting(tester, 'settings-admin-email', 'three@example.com');
-    await enterSetting(
-      tester,
-      'settings-new-password',
-      'preview password three',
-    );
-    await enterSetting(
-      tester,
-      'settings-confirm-password',
-      'preview password three',
-    );
-    await tapSetting(tester, 'settings-dialog-save');
-    expect(find.text('3 of 3 admin slots used'), findsOneWidget);
-    expect(find.text('Maximum of 3 admins reached.'), findsOneWidget);
+    expect(find.text('Preview Gym'), findsOneWidget);
+    await tapSetting(tester, 'settings-advanced');
+    await tapSetting(tester, 'settings-change-server');
+    expect(find.byKey(const ValueKey('server-ip-0')), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(
-            find.byKey(const ValueKey('settings-add-admin')),
+            find.byKey(const ValueKey('settings-dialog-save')),
           )
           .onPressed,
       isNull,
     );
-    await tester.pumpWidget(const SizedBox.shrink());
-    await openSettings(tester);
-    expect(find.text('1 of 3 admin slots used'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('password form validates without storing or claiming a change', (
-    tester,
-  ) async {
-    await tester.binding.setSurfaceSize(const Size(1600, 1000));
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await openSettings(tester);
-    await tapSetting(tester, 'settings-change-password');
-    await tapSetting(tester, 'settings-dialog-save');
-    expect(find.text('Enter the current password'), findsOneWidget);
-    await enterSetting(
-      tester,
-      'settings-current-password',
-      'preview current pass',
-    );
-    await enterSetting(tester, 'settings-new-password', 'preview current pass');
-    await enterSetting(
-      tester,
-      'settings-confirm-password',
-      'preview current pass',
-    );
-    await tapSetting(tester, 'settings-dialog-save');
-    expect(find.text('Choose a different password'), findsOneWidget);
-    await enterSetting(
-      tester,
-      'settings-new-password',
-      'preview updated password',
-    );
-    await enterSetting(
-      tester,
-      'settings-confirm-password',
-      'preview updated password',
-    );
-    final field = find.byKey(const ValueKey('settings-new-password'));
-    expect(tester.widget<TextFormField>(field).controller!.text, isNotEmpty);
-    final passwordController = tester.widget<TextFormField>(field).controller!;
-    await tapSetting(tester, 'settings-dialog-save');
-    expect(passwordController.text, isEmpty);
-    expect(
-      find.text(
-        'Preview validation passed. No password was verified or changed.',
-      ),
-      findsOneWidget,
-    );
-    await tapSetting(tester, 'settings-change-password');
-    expect(
-      tester
-          .widget<TextFormField>(
-            find.byKey(const ValueKey('settings-current-password')),
-          )
-          .controller!
-          .text,
-      isEmpty,
-    );
     await tapSetting(tester, 'settings-dialog-cancel');
     expect(tester.takeException(), isNull);
   });
-
   testWidgets(
-    'preferences validate and keep preview changes across navigation',
+    'password validation clears secrets; normal preview cannot change passwords',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(1600, 1000));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await openSettings(tester);
-      await tapSetting(tester, 'settings-edit-preferences');
-      await enterSetting(tester, 'settings-gym-name', '');
-      await enterSetting(tester, 'settings-server-url', 'wrong-address');
+      await tapSetting(tester, 'settings-change-password');
       await tapSetting(tester, 'settings-dialog-save');
-      expect(find.text('Enter the gym name'), findsOneWidget);
-      expect(
-        find.textContaining('Enter an HTTP(S) server address'),
-        findsOneWidget,
-      );
-      await enterSetting(tester, 'settings-gym-name', 'Preview Gym');
+      expect(find.text('Enter the current password'), findsOneWidget);
       await enterSetting(
         tester,
-        'settings-server-url',
-        'https://gym.example:8000',
+        'settings-current-password',
+        'synthetic current password',
       );
+      await enterSetting(
+        tester,
+        'settings-new-password',
+        'synthetic changed password',
+      );
+      await enterSetting(
+        tester,
+        'settings-confirm-password',
+        'synthetic changed password',
+      );
+      final controller = tester
+          .widget<TextFormField>(
+            find.byKey(const ValueKey('settings-new-password')),
+          )
+          .controller!;
       await tapSetting(tester, 'settings-dialog-save');
-      expect(find.text('Preview Gym'), findsOneWidget);
-      expect(find.text('https://gym.example:8000'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('nav-Members')));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('nav-Settings')));
-      await tester.pumpAndSettle();
-      expect(find.text('Preview Gym'), findsOneWidget);
-      await tapSetting(tester, 'settings-edit-preferences');
-      await enterSetting(tester, 'settings-gym-name', 'Not saved');
-      await tapSetting(tester, 'settings-dialog-cancel');
-      expect(find.text('Preview Gym'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
-
-  testWidgets(
-    'normal app shows no fictional accounts and cannot mutate settings',
-    (tester) async {
-      await tester.binding.setSurfaceSize(const Size(1200, 800));
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      expect(controller.text, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
       await openSettings(tester, preview: false);
-      expect(find.text('Sample Admin'), findsNothing);
+      await tapSetting(tester, 'settings-change-password');
       expect(
         tester
             .widget<FilledButton>(
-              find.byKey(const ValueKey('settings-add-admin')),
+              find.byKey(const ValueKey('settings-dialog-save')),
             )
             .onPressed,
         isNull,
       );
-      for (final key in [
-        'settings-change-password',
-        'settings-edit-preferences',
-      ]) {
-        await tapSetting(tester, key);
-        expect(
-          tester
-              .widget<FilledButton>(
-                find.byKey(const ValueKey('settings-dialog-save')),
-              )
-              .onPressed,
-          isNull,
-        );
-        await tapSetting(tester, 'settings-dialog-cancel');
-      }
-      expect(tester.takeException(), isNull);
+      await tapSetting(tester, 'settings-dialog-cancel');
     },
   );
-
   testWidgets(
-    'settings title stays fixed while the body scrolls in either direction',
-    (tester) async {
-      addTearDown(() => tester.binding.setSurfaceSize(null));
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      for (final (size, scale) in const [
-        (Size(1024, 768), 1.0),
-        (Size(800, 1280), 1.0),
-        (Size(800, 600), 2.0),
-        (Size(360, 740), 1.0),
-        (Size(360, 280), 2.0),
-      ]) {
-        await tester.binding.setSurfaceSize(size);
-        tester.platformDispatcher.textScaleFactorTestValue = scale;
-        await openSettings(tester);
-        final title = find.byKey(const ValueKey('settings-title'));
-        final sidebar = find.byKey(const ValueKey('sidebar'));
-        final body = find.byKey(const PageStorageKey('settings-scroll'));
-        final notice = find.byKey(const ValueKey('settings-notice'));
-        final titleRect = tester.getRect(title);
-        final sidebarRect = tester.getRect(sidebar);
-        final noticeTop = tester.getTopLeft(notice).dy;
-        await tester.drag(body, const Offset(0, -400));
-        await tester.pumpAndSettle();
-        expect(tester.getTopLeft(notice).dy, lessThan(noticeTop));
-        expect(tester.getRect(title), titleRect);
-        expect(tester.getRect(sidebar), sidebarRect);
-
-        await tester.ensureVisible(find.text('Backups & data'));
-        await tester.pumpAndSettle();
-        expect(tester.getRect(title), titleRect);
-        final scrolledTop = tester.getTopLeft(notice).dy;
-        await tester.drag(body, const Offset(0, 300));
-        await tester.pumpAndSettle();
-        expect(tester.getTopLeft(notice).dy, greaterThan(scrolledTop));
-        expect(tester.getRect(title), titleRect);
-        expect(tester.getRect(sidebar), sidebarRect);
-        expect(tester.takeException(), isNull);
-        await tester.pumpWidget(const SizedBox.shrink());
-      }
-    },
-  );
-
-  testWidgets(
-    'settings and dialogs adapt to tablets, large text and keyboard',
+    'settings stays sticky and dialogs adapt to tablets, keyboard and enlarged text',
     (tester) async {
       addTearDown(() => tester.binding.setSurfaceSize(null));
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
@@ -344,21 +203,21 @@ void main() {
           bottom: keyboard * tester.view.devicePixelRatio,
         );
         await openSettings(tester);
-        final sidebar = find.byKey(const ValueKey('sidebar'));
-        final rect = tester.getRect(sidebar);
+        final title = find.byKey(const ValueKey('settings-title'));
+        final rect = tester.getRect(title);
+        await tester.drag(
+          find.byKey(const PageStorageKey('settings-scroll')),
+          const Offset(0, -400),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getRect(title), rect);
         for (final key in [
-          'settings-add-admin',
           'settings-change-password',
           'settings-edit-preferences',
         ]) {
           await tapSetting(tester, key);
-          await tester.drag(
-            find.byKey(const ValueKey('settings-form-scroll')),
-            const Offset(0, -200),
-          );
-          await tester.pumpAndSettle();
           await tapSetting(tester, 'settings-dialog-cancel');
-          expect(tester.getRect(sidebar), rect);
+          expect(tester.getRect(title), rect);
           expect(tester.takeException(), isNull);
         }
         await tester.pumpWidget(const SizedBox.shrink());

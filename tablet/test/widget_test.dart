@@ -26,21 +26,17 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const GymManagementApp());
+    await tester.pump();
 
     expect(find.byType(Scaffold), findsOneWidget);
     expect(find.byType(AppBar), findsNothing);
     expect(find.text('Temporary Button'), findsNothing);
     expect(find.text('RepLab Fitness'), findsOneWidget);
     expect(find.text('Management & Attendance System'), findsOneWidget);
-    expect(find.text('Login'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.text('Next'), findsOneWidget);
+    expect(find.byType(TextField), findsNWidgets(4));
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
-    expect(
-      find.text(
-        'Sign in with your gym admin account and unlock using the tablet PIN or biometrics.',
-      ),
-      findsOneWidget,
-    );
+    expect(find.text('Connect your gym server'), findsOneWidget);
     expect(
       tester.widget<Text>(find.text('RepLab Fitness')).style?.color,
       Colors.white,
@@ -105,23 +101,24 @@ void main() {
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
 
-    expect(authenticationCalls, 1);
-    expect(fixture.requests, isEmpty);
+    expect(authenticationCalls, 0);
     expect(find.byType(DashboardScreen), findsNothing);
-    expect(find.text('Authentication was not completed.'), findsOneWidget);
+    expect(find.text('Server password is incorrect.'), findsOneWidget);
 
     authenticated = true;
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
 
-    expect(authenticationCalls, 2);
+    expect(authenticationCalls, 0);
     expect(find.byType(DashboardScreen), findsNothing);
-    expect(find.text('Email or password is incorrect.'), findsOneWidget);
+    expect(find.text('Server password is incorrect.'), findsOneWidget);
     fixture.allowLogin = true;
     await tester.ensureVisible(find.text('Login'));
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
-    expect(authenticationCalls, 3);
+    await tester.tap(find.byKey(const ValueKey('setup-skip-biometrics')));
+    await tester.pumpAndSettle();
+    expect(authenticationCalls, 0);
     expect(find.byType(DashboardScreen), findsOneWidget);
     expect(
       find.descendant(
@@ -226,7 +223,7 @@ void main() {
     const sections = [
       ('Attendance', 'See who checked in and when.'),
       ('Members', 'Waiting for member connection'),
-      ('Settings', 'Manage administrators and gym preferences.'),
+      ('Settings', 'Manage gym preferences and device connection.'),
       ('Dashboard', 'Welcome to RepLab Fitness'),
     ];
     var previousMessage = 'Welcome to RepLab Fitness';
@@ -589,7 +586,7 @@ void main() {
         await tester.pump(const Duration(seconds: 2));
         expect(find.byKey(const ValueKey('dashboard-overview')), findsNothing);
         expect(
-          find.text('Manage administrators and gym preferences.'),
+          find.text('Manage gym preferences and device connection.'),
           findsOneWidget,
         );
         expect(tester.takeException(), isNull);

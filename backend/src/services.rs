@@ -56,9 +56,9 @@ pub async fn audit(
     Ok(())
 }
 
-async fn take_login_attempt(state: &AppState, email: &str, client: &str) -> Result<()> {
+async fn take_login_attempt(state: &AppState, client: &str) -> Result<()> {
     let mut limits = [
-        (security::digest(&format!("email:{email}")), 10),
+        (security::digest("single-admin"), 10),
         (security::digest(&format!("ip:{client}")), 30),
     ];
     limits.sort_by(|a, b| a.0.cmp(&b.0));
@@ -99,13 +99,11 @@ async fn take_login_attempt(state: &AppState, email: &str, client: &str) -> Resu
 }
 
 pub async fn login(state: &AppState, input: LoginInput, client: &str) -> Result<Value> {
-    let email = email(&input.email, false)?;
     let password = security::password(&input.password, false)?;
-    take_login_attempt(state, &email, client).await?;
+    take_login_attempt(state, client).await?;
     let mut tx = state.pool.begin().await?;
     let row: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT id,password_hash FROM admins WHERE email=$1 FOR UPDATE")
-            .bind(&email)
+        sqlx::query_as("SELECT id,password_hash FROM admins WHERE slot=1 FOR UPDATE")
             .fetch_optional(&mut *tx)
             .await?;
     let encoded = row
@@ -117,7 +115,7 @@ pub async fn login(state: &AppState, input: LoginInput, client: &str) -> Result<
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "invalid_credentials",
-            "Email or password is incorrect.",
+            "Server password is incorrect.",
         ));
     }
     let id = row.unwrap().0;
@@ -127,7 +125,7 @@ pub async fn login(state: &AppState, input: LoginInput, client: &str) -> Result<
             .fetch_one(&mut *tx)
             .await?;
     let token = security::random_token();
-    let expires = Utc::now() + Duration::hours(8);
+    let expires = Utc::now() + Duration::days(90);
     sqlx::query("DELETE FROM login_sessions WHERE expires_at<=now()")
         .execute(&mut *tx)
         .await?;
@@ -171,13 +169,13 @@ pub async fn create_admin(
             "An admin with this email already exists.",
         ));
     }
-    let slot = (1i16..=3)
+    let slot = (1i16..=1)
         .find(|s| !rows.iter().any(|(used, _)| used == s))
         .ok_or_else(|| {
             ApiError::new(
                 StatusCode::CONFLICT,
                 "admin_limit",
-                "Maximum of 3 admins reached.",
+                "Only one server administrator is allowed.",
             )
         })?;
     let hash = security::hash(password, state.hashes.clone()).await?;
@@ -226,6 +224,36 @@ pub async fn logout(state: &AppState, auth: Auth) -> Result<()> {
     Ok(())
 }
 
+/// A revocable, random device session, not the password. Renew its idle lifetime
+/// after a verified resume. No key rotation means a lost response cannot strand
+/// the device; password changes and sign-out invalidate it immediately.
+pub async fn resume(state: &AppState, auth: Auth) -> Result<Value> {
+    let mut tx = state.pool.begin().await?;
+    // Same lock order as password changes: do not resurrect a revoked session.
+    sqlx::query("SELECT id FROM admins WHERE id=$1 FOR UPDATE")
+        .bind(auth.admin.id)
+        .execute(&mut *tx)
+        .await?;
+    let expires: Option<chrono::DateTime<Utc>> = sqlx::query_scalar(
+        "UPDATE login_sessions SET expires_at=now()+interval '90 days'
+         WHERE token_hash=$1 AND expires_at>now() RETURNING expires_at",
+    )
+    .bind(&auth.token_hash)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let expires = expires.ok_or_else(ApiError::unauthorized)?;
+    audit(
+        &mut tx,
+        Some(auth.admin.id),
+        "auth.resume",
+        Some(auth.admin.id),
+        json!({}),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(json!({"expires_at":expires,"admin":auth.admin}))
+}
+
 pub async fn change_password(state: &AppState, auth: Auth, input: PasswordInput) -> Result<()> {
     let current = security::password(&input.current_password, false)?;
     let new = security::password(&input.new_password, true)?;
@@ -272,7 +300,7 @@ pub async fn change_password(state: &AppState, auth: Auth, input: PasswordInput)
 }
 
 pub async fn settings(state: &AppState) -> Result<Settings> {
-    Ok(sqlx::query_as("SELECT gym_name,phone,address,updated_at,'Asia/Kolkata'::text AS timezone,3 AS max_admins FROM gym_settings WHERE id=1")
+    Ok(sqlx::query_as("SELECT gym_name,phone,address,updated_at,'Asia/Kolkata'::text AS timezone,1 AS max_admins FROM gym_settings WHERE id=1")
         .fetch_one(&state.pool).await?)
 }
 
@@ -286,7 +314,7 @@ pub async fn update_settings(
     let address = text(&input.address, 500, false)?;
     let mut tx = state.pool.begin().await?;
     let settings=sqlx::query_as("UPDATE gym_settings SET gym_name=$1,phone=$2,address=$3,updated_at=now() WHERE id=1
-        RETURNING gym_name,phone,address,updated_at,'Asia/Kolkata'::text AS timezone,3 AS max_admins")
+        RETURNING gym_name,phone,address,updated_at,'Asia/Kolkata'::text AS timezone,1 AS max_admins")
         .bind(name).bind(phone).bind(address).fetch_one(&mut *tx).await?;
     audit(
         &mut tx,

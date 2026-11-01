@@ -1,12 +1,19 @@
 # RepLab Android tablet — Rust API integration
 
-The app authenticates administrators over HTTPS. Android additionally requires
-the tablet PIN/biometrics; unlocking the tablet alone never grants server access.
-The browser skips the device-unlock step, not server authentication.
+The app has one server administrator and uses HTTPS on hardcoded port **8443**.
+Fresh installation asks for hostname/IP (four dotted IPv4 boxes or hostname),
+then server password, then optional biometric enrollment. No username, email,
+port input, full URL or second tablet PIN is required.
 
-Implemented: login/logout/session expiry, live dashboard member counts,
-server-paginated member search/registration/detail, gym settings, admin creation
-(maximum three, enforced by the server), and password changes.
+Later launches resume the securely saved session automatically. If biometrics
+were enabled, fingerprint/face verification is required first; otherwise the
+splash proceeds directly to the dashboard after server verification.
+Host/IP and biometric preferences live in **Settings → Advanced settings**.
+Changing servers requires that server's password before saving the new connection;
+old session keys are never sent to a different host.
+
+Implemented: setup, login/logout/session resumption, live dashboard member counts,
+server-paginated member search/registration/detail, gym settings and password changes.
 The existing theme, fixed sidebar, sticky headers and rotating-dumbbell loaders
 are retained.
 
@@ -26,13 +33,13 @@ docker compose -f backend/compose.yaml exec api replab-server create-admin
 docker compose -f compose.preview.yaml up -d --force-recreate
 ```
 
-`create-admin` securely prompts for your own name/email/password. It only works
+`create-admin` securely prompts for password and confirmation only. It works
 before an admin exists. Never use a sample/default account or expose bootstrap
 over HTTP. Existing admins sign in normally; do not reset the database.
 
 Trust the **public** `backend/certs/server.crt` in your browser/Windows user trust
 store, after verifying its fingerprint with the server operator. Do not disable
-TLS verification. Open `https://localhost:8001/health/ready` to confirm certificate
+TLS verification. Open `https://localhost:8443/health/ready` to confirm certificate
 trust, then `http://localhost:8080` and sign in. The server's development CORS
 allowlist includes that exact browser origin. A certificate/CORS/network failure
 is shown in the login form instead of letting the user into the dashboard.
@@ -81,20 +88,21 @@ docker exec -w /workspace/tablet gym-app-build flutter build apk --release --dar
 ```
 
 APK: `build/app/outputs/flutter-apk/app-release.apk`.
-The configured address pre-fills the login form; staff can change it when signed
-out. Without `API_BASE_URL`, enter the HTTPS address manually. Without
+Only the hostname from `API_BASE_URL` pre-fills first setup; its port cannot
+override the hardcoded 8443. Without that define, enter the hostname/IP.
+Once saved, device settings take precedence over build defaults. Without
 `API_CERT_ASSET`, Android uses standard trusted certificate authorities.
 Custom certificate trust still validates the certificate chain, hostname/IP and
 expiry; it never installs an accept-all certificate callback.
 
 Rebuild with the Pi's public certificate before deploying an APK built with the
-Windows development server certificate. Changing the address in the login form
+Windows development server certificate. Changing the host in Advanced settings
 does not change certificate trust. Renewal/IP changes require coordinated
 client trust updates. Current APK release signing uses the existing debug
 keystore; configure your own release keystore before a production rollout.
 
 For USB development against this PC, a localhost-certificate APK can use
-`https://localhost:8001` with `adb reverse tcp:8001 tcp:8001`; this does not expose
+`https://localhost:8443` with `adb reverse tcp:8443 tcp:8443`; this does not expose
 the PC API to the LAN or require opening a Windows firewall port.
 ADB/device permissions and a connected tablet must still be configured.
 
@@ -126,7 +134,7 @@ browser API access is intentionally disabled until its exact origin is allowed.
    Keep the file private; never paste its contents into a support message.
    Then run `sudo systemctl restart replab`. If the preview uses another origin,
    allow that exact scheme, hostname and port instead; never use `*`.
-3. In the preview login form, enter `https://<PI_IP>:8443`. To pre-fill it:
+3. In the preview setup, enter only the Pi IP or hostname. To pre-fill it:
 
    ```powershell
    $env:API_BASE_URL = 'https://192.168.1.50:8443'
@@ -140,11 +148,25 @@ Pi certificate bundled in its APK, but does not need browser CORS permission.
 
 ## Sessions and failures
 
-Bearer tokens are memory-only: restart requires login. No credentials, tokens,
-or member directory are stored in preferences/local files. Server expiry,
-revocation or password changes return to login and close open dialogs.
-Logout clears the tablet session even if server revocation cannot be confirmed;
-the UI warns that the old server session then expires normally.
+Android remembers a random, revocable 256-bit session key in encrypted
+`flutter_secure_storage`, together with host and biometric preferences; it
+**never stores the server password**. Android backup is disabled to avoid
+restoring enrollment into a fresh installation. Member directories are not
+persisted locally. Tokens are never written to logs or plain preferences.
+
+The server stores only token hashes. Successful resume renews a 90-day idle
+lifetime without rotating the key, so a lost response cannot strand the tablet.
+Password is needed again only after sign-out, reinstall, password/session
+revocation or expiry after inactivity. Network errors retain the stored key and
+offer retry, not a fake offline dashboard. Enabled biometrics re-lock the app
+when it is backgrounded. Biometrics are optional and do not replace server
+verification; device PIN fallback is not an additional app login.
+
+Browser preview saves the host only, not bearer keys in browser storage.
+A browser reload therefore asks for the password again; Android does not.
+Revocation/password changes return to login and close open dialogs.
+Logout forgets the saved tablet key even if server revocation cannot be
+confirmed, with a warning that the old key then expires normally.
 
 Read failures preserve already-loaded data with an error/retry notice, not a
 claim of successful synchronization. Search requests ignore stale responses.
@@ -161,11 +183,11 @@ docker exec -w /workspace/tablet gym-app-build flutter test --no-pub
 ```
 
 Default tests use synthetic HTTP responses and exercise the complete UI-to-client
-contract: device unlock plus server login, member persistence/search/details,
-settings/admin cap, session revocation, offline states, and request serialization.
+contract: first setup, remembered sessions with/without biometrics, member
+persistence/search/details, advanced settings, revocation, offline states, and serialization.
 `test/native_https_test.dart` additionally checks actual HTTPS and persistent
 writes against an explicitly prepared, fresh `replab_test` database served on
-`https://localhost:9443`. Its two checks are skipped by default; never point them
+`https://localhost:8443`. Its two checks are skipped by default; never point them
 at the live database. Run with `LIVE_TEST_API_URL` and `API_CERT_ASSET` Dart defines
 only after seeding the synthetic administrator specified in that test.
 Physical tablet networking, certificate trust, Android unlock and Pi deployment

@@ -8,7 +8,8 @@ service on the private Compose network.
 
 The deployable server now lives separately in **`backend/`**. It includes
 Rust/Axum, PostgreSQL, embedded SQL migrations, admin authentication, the enforced
-three-admin limit, gym settings, and basic member registration/list/detail APIs.
+single-admin limit, password-only enrollment, remembered sessions, gym settings,
+and basic member registration/list/detail APIs.
 See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testing,
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
@@ -52,8 +53,11 @@ the package cache.
 
 The debug-only `tablet/lib/preview.dart` now opens real administrator login.
 Trust the local API certificate and create the first admin as described in
-`tablet/README.md`. Android continues to use `lib/main.dart`, requiring both
-device unlock and server authentication. Set `SHOW_SAMPLE_DATA=true` when
+`tablet/README.md`. Android continues to use `lib/main.dart`: first setup asks
+for host/IP and server password, then optionally enables biometrics. Later
+launches securely resume the session, without another password unless revoked.
+HTTPS port 8443 is fixed in both the app and server.
+Set `SHOW_SAMPLE_DATA=true` when
 recreating the preview container to use the separate fictional UI fixtures.
 
 The dashboard contains the greeting, a live gym-local clock (IST), four
@@ -105,16 +109,15 @@ disappear on refresh/hot restart. The authenticated app loads and registers real
 records through the Rust API, uses server pagination/search and fetches full
 basic profiles by UUID. No biometric data, plans, or payments are created by the form.
 
-Settings includes administrator management (maximum three, including the initial
-admin), password-change forms, gym/contact details, an API address preference,
-and honest terminal/backup availability indicators. Preview identities and settings
-remain when navigating between sections, but reset on restart. Password forms
-validate only and discard their input; they never store credentials, verify a
-current password, create a usable login, or change the tablet PIN.
-The authenticated app saves gym settings, creates usable administrators and
-changes passwords through the API. Password changes revoke all own sessions.
-The server enforces authorization, unique identities and the three-admin limit
-transactionally; the preview/UI limit is not a security boundary.
+Settings includes single-admin server authentication, password changes,
+gym/contact details and honest terminal/backup availability indicators.
+Advanced settings contains host/IP changes and optional biometric unlock.
+The app remembers an encrypted session key, never the server password.
+Preview settings reset on restart; preview password forms discard their inputs
+and cannot create usable credentials or change any tablet PIN.
+The authenticated app saves gym settings and changes passwords through the API.
+Password changes revoke all saved sessions; the one-admin constraint is enforced
+transactionally and in PostgreSQL, not just in the UI.
 The Settings title stays fixed while its body scrolls beneath it,
 matching the Attendance page header.
 
