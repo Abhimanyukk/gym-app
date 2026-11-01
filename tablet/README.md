@@ -55,7 +55,24 @@ Fixtures are available only in debug web runs. The production entry point is
 1. Deploy the backend using `../backend/README.md`; create the first admin on it.
 2. Reserve the Pi's private IP and ensure its certificate includes that exact IP.
 3. Copy only its public `server.crt` to `assets/certificates/server.crt`.
-   Never copy `server.key`, environment files, DB passwords or member records.
+   The protected `/etc/replab` directory cannot be read directly by the ordinary
+   SSH user. On the Pi (substitute your SSH user's home if it is not `pi`):
+
+   ```sh
+   sudo install -m 644 /etc/replab/server.crt /home/pi/replab-server.crt
+   sudo openssl x509 -in /etc/replab/server.crt -noout -fingerprint -sha256
+   ```
+
+   From PowerShell at the workspace root, substitute the actual Pi IP:
+
+   ```powershell
+   scp pi@192.168.1.50:/home/pi/replab-server.crt .\tablet\assets\certificates\server.crt
+   docker exec gym-app-build openssl x509 -in /workspace/tablet/assets/certificates/server.crt -noout -fingerprint -sha256
+   ```
+
+   Verify that the SHA-256 certificate fingerprints match before trusting or
+   bundling it. Never copy `server.key`, environment files, DB passwords or
+   member records.
 4. Build inside the existing Flutter container; substitute the actual Pi IP:
 
 ```powershell
@@ -71,7 +88,8 @@ Custom certificate trust still validates the certificate chain, hostname/IP and
 expiry; it never installs an accept-all certificate callback.
 
 Rebuild with the Pi's public certificate before deploying an APK built with the
-Windows development server certificate. Renewal/IP changes require coordinated
+Windows development server certificate. Changing the address in the login form
+does not change certificate trust. Renewal/IP changes require coordinated
 client trust updates. Current APK release signing uses the existing debug
 keystore; configure your own release keystore before a production rollout.
 
@@ -79,6 +97,46 @@ For USB development against this PC, a localhost-certificate APK can use
 `https://localhost:8001` with `adb reverse tcp:8001 tcp:8001`; this does not expose
 the PC API to the LAN or require opening a Windows firewall port.
 ADB/device permissions and a connected tablet must still be configured.
+
+## Browser preview against the Pi
+
+A successful readiness check on the Pi proves the API/database are ready, not
+that the PC or tablet trusts its certificate. Android certificate assets do not
+configure browser trust. Also, a new Pi configuration has `CORS_ORIGINS=` empty:
+browser API access is intentionally disabled until its exact origin is allowed.
+
+1. Transfer and verify the Pi's **public** certificate as above. For Chrome/Edge
+   on Windows, explicitly trust that verified certificate in your current-user
+   store (subject to your organization's certificate policy):
+
+   ```powershell
+   Import-Certificate -FilePath (Resolve-Path .\tablet\assets\certificates\server.crt).Path -CertStoreLocation Cert:\CurrentUser\Root
+   ```
+
+   Restart the browser, then open `https://<PI_IP>:8443/health/ready`.
+   It must show ready JSON without a certificate warning. Other browsers may
+   require configuring their own certificate store.
+2. On the Pi, use `sudoedit /etc/replab/runtime.env` to change **only** this line
+   for the preview served at `http://localhost:8080`:
+
+   ```dotenv
+   CORS_ORIGINS=http://localhost:8080
+   ```
+
+   Keep the file private; never paste its contents into a support message.
+   Then run `sudo systemctl restart replab`. If the preview uses another origin,
+   allow that exact scheme, hostname and port instead; never use `*`.
+3. In the preview login form, enter `https://<PI_IP>:8443`. To pre-fill it:
+
+   ```powershell
+   $env:API_BASE_URL = 'https://192.168.1.50:8443'
+   docker compose -f compose.preview.yaml up -d --force-recreate
+   ```
+
+If requests still fail, inspect the browser's Network/Console panels to
+distinguish certificate, CORS, local-network permission, and timeout errors.
+Do not disable TLS verification or browser security. Native Android needs the
+Pi certificate bundled in its APK, but does not need browser CORS permission.
 
 ## Sessions and failures
 

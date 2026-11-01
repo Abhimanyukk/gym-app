@@ -163,8 +163,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now replab
 sudo systemctl status replab --no-pager
 sudo journalctl -u replab -n 50 --no-pager
-curl --cacert /etc/replab/server.crt https://192.168.1.50:8443/health/ready
+sudo curl --cacert /etc/replab/server.crt https://192.168.1.50:8443/health/ready
 ```
+
+Use `sudo` for this check: `/etc/replab` is restricted to root and the `replab`
+group, so an ordinary login user cannot read the certificate through it.
+Keep the directory, private key, and environment-file permissions unchanged.
 
 Expected readiness: `{"status":"ready","database":"ok","schema":"1"}`.
 The service starts after boot, restarts failures, runs as non-root `replab`,
