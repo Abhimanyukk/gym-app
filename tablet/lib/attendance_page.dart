@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollDirection;
 
+import 'app_loading.dart';
 import 'sample_attendance.dart';
 
 class AttendancePage extends StatefulWidget {
@@ -596,106 +597,118 @@ class _AttendancePageState extends State<AttendancePage>
                             ),
                           ),
                         Expanded(
-                          child: NotificationListener<ScrollNotification>(
-                            onNotification: _onListScroll,
-                            child: Scrollbar(
-                              controller: _listScroll,
-                              child: ListView(
-                                key: const ValueKey('attendance-scroll'),
+                          child: DumbbellRefresh(
+                            key: const ValueKey('attendance-refresh'),
+                            onRefresh: () => refreshLocalView(
+                              context,
+                              preview: _isPreview,
+                              rebuild: () => setState(() {}),
+                            ),
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: _onListScroll,
+                              child: Scrollbar(
                                 controller: _listScroll,
-                                primary: false,
-                                physics: const AlwaysScrollableScrollPhysics(
-                                  parent: ClampingScrollPhysics(),
-                                ),
-                                padding: EdgeInsets.zero,
-                                children: [
-                                  if (visible.isEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 36,
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Icon(
-                                            _isPreview
-                                                ? Icons.search_off_rounded
-                                                : Icons.cloud_off_outlined,
-                                            size: 36,
+                                child: ListView(
+                                  key: const ValueKey('attendance-scroll'),
+                                  controller: _listScroll,
+                                  primary: false,
+                                  physics: const AlwaysScrollableScrollPhysics(
+                                    parent: ClampingScrollPhysics(),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  children: [
+                                    if (visible.isEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 36,
+                                        ),
+                                        child: Column(
+                                          children: [
+                                            Icon(
+                                              _isPreview
+                                                  ? Icons.search_off_rounded
+                                                  : Icons.cloud_off_outlined,
+                                              size: 36,
+                                              color: theme
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                            const SizedBox(height: 16),
+                                            Text(
+                                              !_isPreview
+                                                  ? 'Waiting for attendance connection'
+                                                  : entries.isEmpty
+                                                  ? 'No sample check-ins for this date'
+                                                  : 'No matching check-ins',
+                                              textAlign: TextAlign.center,
+                                              style:
+                                                  theme.textTheme.titleMedium,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              !_isPreview
+                                                  ? 'No live records or totals are available yet.'
+                                                  : entries.isEmpty
+                                                  ? 'Choose today or yesterday to explore the sample list.'
+                                                  : 'Try a different name, member number, or status.',
+                                              textAlign: TextAlign.center,
+                                              style: theme.textTheme.bodyMedium,
+                                            ),
+                                            if (query.isNotEmpty ||
+                                                _status != null)
+                                              TextButton(
+                                                key: const ValueKey(
+                                                  'attendance-reset-filters',
+                                                ),
+                                                onPressed: () {
+                                                  _resetList();
+                                                  setState(() {
+                                                    _search.clear();
+                                                    _status = null;
+                                                  });
+                                                },
+                                                child: const Text(
+                                                  'Clear filters',
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      )
+                                    else ...[
+                                      for (
+                                        var index = 0;
+                                        index < visible.length;
+                                        index++
+                                      ) ...[
+                                        if (index > 0)
+                                          const Divider(
+                                            height: 1,
+                                            color: Color(0xFFDDDDDD),
+                                          ),
+                                        _AttendanceRow(
+                                          key: ValueKey(
+                                            'attendance-entry-${visible[index].memberNumber}-${visible[index].time.millisecondsSinceEpoch}',
+                                          ),
+                                          entry: visible[index],
+                                          visits:
+                                              memberVisits[visible[index]
+                                                  .memberNumber]!,
+                                          wide: wide,
+                                        ),
+                                      ],
+                                    ],
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Check-ins record visits, not who is currently inside the gym. Staff authorization is not connected yet.',
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
                                             color: theme
                                                 .colorScheme
                                                 .onSurfaceVariant,
                                           ),
-                                          const SizedBox(height: 16),
-                                          Text(
-                                            !_isPreview
-                                                ? 'Waiting for attendance connection'
-                                                : entries.isEmpty
-                                                ? 'No sample check-ins for this date'
-                                                : 'No matching check-ins',
-                                            textAlign: TextAlign.center,
-                                            style: theme.textTheme.titleMedium,
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            !_isPreview
-                                                ? 'No live records or totals are available yet.'
-                                                : entries.isEmpty
-                                                ? 'Choose today or yesterday to explore the sample list.'
-                                                : 'Try a different name, member number, or status.',
-                                            textAlign: TextAlign.center,
-                                            style: theme.textTheme.bodyMedium,
-                                          ),
-                                          if (query.isNotEmpty ||
-                                              _status != null)
-                                            TextButton(
-                                              key: const ValueKey(
-                                                'attendance-reset-filters',
-                                              ),
-                                              onPressed: () {
-                                                _resetList();
-                                                setState(() {
-                                                  _search.clear();
-                                                  _status = null;
-                                                });
-                                              },
-                                              child: const Text(
-                                                'Clear filters',
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                    )
-                                  else ...[
-                                    for (
-                                      var index = 0;
-                                      index < visible.length;
-                                      index++
-                                    ) ...[
-                                      if (index > 0)
-                                        const Divider(
-                                          height: 1,
-                                          color: Color(0xFFDDDDDD),
-                                        ),
-                                      _AttendanceRow(
-                                        key: ValueKey(
-                                          'attendance-entry-${visible[index].memberNumber}-${visible[index].time.millisecondsSinceEpoch}',
-                                        ),
-                                        entry: visible[index],
-                                        visits:
-                                            memberVisits[visible[index]
-                                                .memberNumber]!,
-                                        wide: wide,
-                                      ),
-                                    ],
-                                  ],
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'Check-ins record visits, not who is currently inside the gym. Staff authorization is not connected yet.',
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),

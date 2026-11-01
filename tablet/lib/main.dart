@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:local_auth/local_auth.dart';
 
+import 'app_loading.dart';
 import 'dashboard_screen.dart';
 
 void main() {
@@ -220,11 +221,9 @@ class _SplashScreenState extends State<SplashScreen>
                                         ? null
                                         : _authenticateWithDeviceSecurity,
                                     child: _isAuthenticating
-                                        ? const SizedBox.square(
-                                            dimension: 22,
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
+                                        ? const DumbbellLoader(
+                                            size: 22,
+                                            label: 'Unlocking RepLab Fitness',
                                           )
                                         : const Text('Login'),
                                   ),

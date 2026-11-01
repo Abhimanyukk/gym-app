@@ -44,8 +44,20 @@ The dashboard contains the greeting, a live gym-local clock (IST), four
 summary cards, and recent check-ins with membership status badges. Only
 the debug preview enables the clearly labelled reference sample data.
 The normal app shows unavailable totals and an attendance-not-connected
-message until the backend is integrated; it does not report invented
+message with the same offline cloud icon as Attendance and Members until the
+backend is integrated; it does not report invented
 member counts or revenue.
+
+Pull down at the top of Dashboard's body, Attendance's check-in list, or the
+Members list to refresh, including empty and filtered lists. In the browser
+preview, click and drag down to try the same gesture. A rotating dumbbell
+in a green circle replaces the standard refresh spinner; the same shared loader
+is used during login and is the app's loading style. Reduced-motion settings
+keep the dumbbell stationary. Refresh retains the selected date, search, filters,
+and temporary member registrations; Attendance's downward swipe still reopens
+its overview. Debug preview refreshes briefly show the animation and rebuild
+local data only. Normal-app refreshes retain the disconnected state and explain
+that live data cannot be fetched until the backend is integrated.
 
 Attendance opens on today's gym-local date, with member numbers,
 check-in times (IST), membership-status badges, search, status filters,
@@ -86,7 +98,7 @@ current password, create a usable login, or change the tablet PIN. Normal-app
 mutations are disabled until staff authentication and backend integration exist.
 The server must enforce authorization, unique identities, and the three-admin
 limit transactionally; the preview/UI limit is not a security boundary.
-The Settings title and subtitle stay fixed while its cards scroll beneath them,
+The Settings title stays fixed while its body scrolls beneath it,
 matching the Attendance page header.
 
 The left sidebar is fixed and does not scroll; only the page body scrolls.

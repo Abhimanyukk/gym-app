@@ -168,6 +168,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('member-details-close')));
     await tester.pumpAndSettle();
     expect(find.text('179 of 179 members'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('members-list')),
+      const Offset(0, 500),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('179 of 179 members'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('nav-Settings')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('nav-Members')));

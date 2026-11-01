@@ -164,24 +164,26 @@ class _SettingsPageState extends State<SettingsPage> {
             Text(
               'Settings',
               key: const ValueKey('settings-title'),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: theme.textTheme.headlineMedium?.copyWith(
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              'Manage administrators and gym preferences.',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 24),
             Expanded(
               child: SingleChildScrollView(
                 key: const PageStorageKey('settings-scroll'),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Text(
+                      'Manage administrators and gym preferences.',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(

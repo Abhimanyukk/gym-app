@@ -178,6 +178,12 @@ void main() {
       await tester.tap(find.text(localizations.okButtonLabel));
       await tester.pumpAndSettle();
       expect(find.text(expected), findsOneWidget);
+      await tester.drag(
+        find.byKey(const ValueKey('attendance-scroll')),
+        const Offset(0, 500),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(expected), findsOneWidget);
       expect(
         tester
             .widget<TextButton>(find.byKey(const ValueKey('attendance-today')))

@@ -293,26 +293,22 @@ void main() {
         (Size(800, 1280), 1.0),
         (Size(800, 600), 2.0),
         (Size(360, 740), 1.0),
+        (Size(360, 280), 2.0),
       ]) {
         await tester.binding.setSurfaceSize(size);
         tester.platformDispatcher.textScaleFactorTestValue = scale;
         await openSettings(tester);
         final title = find.byKey(const ValueKey('settings-title'));
-        final subtitle = find.text(
-          'Manage administrators and gym preferences.',
-        );
         final sidebar = find.byKey(const ValueKey('sidebar'));
         final body = find.byKey(const PageStorageKey('settings-scroll'));
         final notice = find.byKey(const ValueKey('settings-notice'));
         final titleRect = tester.getRect(title);
-        final subtitleRect = tester.getRect(subtitle);
         final sidebarRect = tester.getRect(sidebar);
         final noticeTop = tester.getTopLeft(notice).dy;
         await tester.drag(body, const Offset(0, -400));
         await tester.pumpAndSettle();
         expect(tester.getTopLeft(notice).dy, lessThan(noticeTop));
         expect(tester.getRect(title), titleRect);
-        expect(tester.getRect(subtitle), subtitleRect);
         expect(tester.getRect(sidebar), sidebarRect);
 
         await tester.ensureVisible(find.text('Backups & data'));
@@ -323,7 +319,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.getTopLeft(notice).dy, greaterThan(scrolledTop));
         expect(tester.getRect(title), titleRect);
-        expect(tester.getRect(subtitle), subtitleRect);
         expect(tester.getRect(sidebar), sidebarRect);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'app_loading.dart';
 import 'member_profile.dart';
 import 'sample_attendance.dart';
 
@@ -249,158 +250,173 @@ class _MembersPageState extends State<MembersPage> {
                         ),
                       ),
                     Expanded(
-                      child: Scrollbar(
-                        controller: _scroll,
-                        child: ListView.separated(
-                          key: const ValueKey('members-list'),
+                      child: DumbbellRefresh(
+                        key: const ValueKey('members-refresh'),
+                        onRefresh: () => refreshLocalView(
+                          context,
+                          preview: _isPreview,
+                          rebuild: () => setState(() {}),
+                        ),
+                        child: Scrollbar(
                           controller: _scroll,
-                          padding: EdgeInsets.zero,
-                          itemCount: visible.isEmpty ? 1 : visible.length,
-                          separatorBuilder: (_, _) => const Divider(
-                            height: 1,
-                            color: Color(0xFFDDDDDD),
-                          ),
-                          itemBuilder: (context, index) {
-                            if (visible.isEmpty) {
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 32,
-                                ),
-                                child: Column(
-                                  children: [
-                                    Icon(
-                                      _isPreview
-                                          ? Icons.person_search_rounded
-                                          : Icons.cloud_off_outlined,
-                                      size: 36,
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Text(
-                                      _isPreview
-                                          ? 'No matching members'
-                                          : 'Waiting for member connection',
-                                      textAlign: TextAlign.center,
-                                      style: theme.textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      _isPreview
-                                          ? 'Try another search or membership filter.'
-                                          : 'Registered members will appear once the backend is connected.',
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    if (_isPreview)
-                                      TextButton(
-                                        key: const ValueKey('members-reset'),
-                                        onPressed: () => _update(() {
-                                          _search.clear();
-                                          _filter = 'All members';
-                                        }),
-                                        child: const Text('Clear filters'),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            }
-                            final member = visible[index];
-                            final identity = Row(
-                              children: [
-                                _MemberAvatar(member: member),
-                                const SizedBox(width: 16),
-                                Expanded(
+                          child: ListView.separated(
+                            key: const ValueKey('members-list'),
+                            controller: _scroll,
+                            physics: const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics(),
+                            ),
+                            padding: EdgeInsets.zero,
+                            itemCount: visible.isEmpty ? 1 : visible.length,
+                            separatorBuilder: (_, _) => const Divider(
+                              height: 1,
+                              color: Color(0xFFDDDDDD),
+                            ),
+                            itemBuilder: (context, index) {
+                              if (visible.isEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 32,
+                                  ),
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        member.name,
-                                        style: theme.textTheme.bodyLarge
-                                            ?.copyWith(
-                                              fontWeight: FontWeight.w600,
-                                            ),
+                                      Icon(
+                                        _isPreview
+                                            ? Icons.person_search_rounded
+                                            : Icons.cloud_off_outlined,
+                                        size: 36,
+                                        color:
+                                            theme.colorScheme.onSurfaceVariant,
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 16),
                                       Text(
-                                        member.number,
-                                        style: theme.textTheme.bodySmall
-                                            ?.copyWith(
-                                              color: theme
-                                                  .colorScheme
-                                                  .onSurfaceVariant,
-                                            ),
+                                        _isPreview
+                                            ? 'No matching members'
+                                            : 'Waiting for member connection',
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.titleMedium,
                                       ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        _isPreview
+                                            ? 'Try another search or membership filter.'
+                                            : 'Registered members will appear once the backend is connected.',
+                                        textAlign: TextAlign.center,
+                                      ),
+                                      if (_isPreview)
+                                        TextButton(
+                                          key: const ValueKey('members-reset'),
+                                          onPressed: () => _update(() {
+                                            _search.clear();
+                                            _filter = 'All members';
+                                          }),
+                                          child: const Text('Clear filters'),
+                                        ),
                                     ],
                                   ),
-                                ),
-                              ],
-                            );
-                            return Semantics(
-                              button: true,
-                              child: InkWell(
-                                key: ValueKey('member-${member.number}'),
-                                onTap: () => _openMember(member),
-                                borderRadius: BorderRadius.circular(8),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 16,
-                                    horizontal: 4,
-                                  ),
-                                  child: wide
-                                      ? Row(
-                                          children: [
-                                            Expanded(child: identity),
-                                            const SizedBox(width: 20),
-                                            SizedBox(
-                                              width: 140,
-                                              child: Text(
-                                                member.plan ?? 'No plan',
+                                );
+                              }
+                              final member = visible[index];
+                              final identity = Row(
+                                children: [
+                                  _MemberAvatar(member: member),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          member.name,
+                                          style: theme.textTheme.bodyLarge
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.w600,
                                               ),
-                                            ),
-                                            const SizedBox(width: 20),
-                                            SizedBox(
-                                              width: 144,
-                                              child: Align(
-                                                alignment: Alignment.centerLeft,
-                                                child: _MembershipBadge(
-                                                  member: member,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 12),
-                                            const Icon(
-                                              Icons.chevron_right_rounded,
-                                              size: 24,
-                                            ),
-                                          ],
-                                        )
-                                      : Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            identity,
-                                            const SizedBox(height: 12),
-                                            Wrap(
-                                              spacing: 16,
-                                              runSpacing: 8,
-                                              crossAxisAlignment:
-                                                  WrapCrossAlignment.center,
-                                              children: [
-                                                Text(member.plan ?? 'No plan'),
-                                                _MembershipBadge(
-                                                  member: member,
-                                                ),
-                                                const Icon(
-                                                  Icons.chevron_right_rounded,
-                                                ),
-                                              ],
-                                            ),
-                                          ],
                                         ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          member.number,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                color: theme
+                                                    .colorScheme
+                                                    .onSurfaceVariant,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              );
+                              return Semantics(
+                                button: true,
+                                child: InkWell(
+                                  key: ValueKey('member-${member.number}'),
+                                  onTap: () => _openMember(member),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                      horizontal: 4,
+                                    ),
+                                    child: wide
+                                        ? Row(
+                                            children: [
+                                              Expanded(child: identity),
+                                              const SizedBox(width: 20),
+                                              SizedBox(
+                                                width: 140,
+                                                child: Text(
+                                                  member.plan ?? 'No plan',
+                                                ),
+                                              ),
+                                              const SizedBox(width: 20),
+                                              SizedBox(
+                                                width: 144,
+                                                child: Align(
+                                                  alignment:
+                                                      Alignment.centerLeft,
+                                                  child: _MembershipBadge(
+                                                    member: member,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              const Icon(
+                                                Icons.chevron_right_rounded,
+                                                size: 24,
+                                              ),
+                                            ],
+                                          )
+                                        : Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              identity,
+                                              const SizedBox(height: 12),
+                                              Wrap(
+                                                spacing: 16,
+                                                runSpacing: 8,
+                                                crossAxisAlignment:
+                                                    WrapCrossAlignment.center,
+                                                children: [
+                                                  Text(
+                                                    member.plan ?? 'No plan',
+                                                  ),
+                                                  _MembershipBadge(
+                                                    member: member,
+                                                  ),
+                                                  const Icon(
+                                                    Icons.chevron_right_rounded,
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                  ),
                                 ),
-                              ),
-                            );
-                          },
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),

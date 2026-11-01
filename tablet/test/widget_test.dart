@@ -193,6 +193,17 @@ void main() {
       find.text('Check-ins will appear here once attendance is connected.'),
       findsOneWidget,
     );
+    final offlineIcon = find.descendant(
+      of: find.byKey(const ValueKey('recent-check-ins')),
+      matching: find.byIcon(Icons.cloud_off_outlined),
+    );
+    expect(offlineIcon, findsOneWidget);
+    expect(tester.widget<Icon>(offlineIcon).size, 36);
+    expect(
+      tester.widget<Icon>(offlineIcon).color,
+      Theme.of(tester.element(offlineIcon)).colorScheme.onSurfaceVariant,
+    );
+    expect(find.text('Waiting for attendance connection'), findsOneWidget);
 
     const sections = [
       ('Attendance', 'See who checked in and when.'),
@@ -506,6 +517,7 @@ void main() {
 
         expect(find.text('Welcome to RepLab Fitness'), findsOneWidget);
         expect(find.textContaining('Sample data'), findsOneWidget);
+        expect(find.byIcon(Icons.cloud_off_outlined), findsNothing);
         expect(
           tester
               .widget<Text>(find.byKey(const ValueKey('dashboard-greeting')))

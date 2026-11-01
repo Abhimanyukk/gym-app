@@ -115,11 +115,28 @@ class DashboardOverview extends StatelessWidget {
                   else
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Text(
-                        'Check-ins will appear here once attendance is connected.',
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.cloud_off_outlined,
+                            size: 36,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Waiting for attendance connection',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Check-ins will appear here once attendance is connected.',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                 ],

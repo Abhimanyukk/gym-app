@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import 'app_loading.dart';
 import 'attendance_page.dart';
 import 'dashboard_overview.dart';
 import 'member_profile.dart';
@@ -187,11 +188,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             _ => SettingsPage(preview: _settings),
                           },
                         )
-                      : SingleChildScrollView(
-                          key: PageStorageKey(section.title),
-                          padding: const EdgeInsets.all(32),
-                          child: DashboardOverview(
-                            showSampleData: kDebugMode && widget.showSampleData,
+                      : DumbbellRefresh(
+                          key: const ValueKey('dashboard-refresh'),
+                          onRefresh: () => refreshLocalView(
+                            context,
+                            preview: kDebugMode && widget.showSampleData,
+                            rebuild: () => setState(() {}),
+                          ),
+                          child: SingleChildScrollView(
+                            key: PageStorageKey(section.title),
+                            physics: const AlwaysScrollableScrollPhysics(
+                              parent: ClampingScrollPhysics(),
+                            ),
+                            padding: const EdgeInsets.all(32),
+                            child: DashboardOverview(
+                              showSampleData:
+                                  kDebugMode && widget.showSampleData,
+                            ),
                           ),
                         ),
                 ),
