@@ -88,12 +88,16 @@ async fn request_middleware(
         .get::<MatchedPath>()
         .map(|p| p.as_str().to_owned())
         .unwrap_or_else(|| "unmatched".into());
-    let host = request
-        .headers()
-        .get("host")
-        .and_then(|h| h.to_str().ok())
-        .and_then(|h| h.parse::<axum::http::uri::Authority>().ok())
-        .map(|h| h.host().to_lowercase());
+    // HTTP/2 carries :authority in the URI, not necessarily a Host header.
+    // An explicitly malformed Host must still fail closed, not use the fallback.
+    let authority = match request.headers().get("host") {
+        Some(host) => host
+            .to_str()
+            .ok()
+            .and_then(|h| h.parse::<axum::http::uri::Authority>().ok()),
+        None => request.uri().authority().cloned(),
+    };
+    let host = authority.map(|h| h.host().to_lowercase());
     let permit = state.requests.try_acquire();
     let mut response = if !host.is_some_and(|h| {
         state

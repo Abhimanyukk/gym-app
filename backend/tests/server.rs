@@ -101,6 +101,20 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     };
     let state = AppState::new(runtime.clone(), config).await.unwrap();
     let app = api::router(state.clone()).unwrap();
+    for (authority, expected) in [
+        ("localhost:8443", StatusCode::OK),
+        ("untrusted.example:8443", StatusCode::BAD_REQUEST),
+    ] {
+        let request = Request::builder()
+            .version(axum::http::Version::HTTP_2)
+            .uri(format!("https://{authority}/health/live"))
+            .body(Body::empty())
+            .unwrap();
+        assert_eq!(
+            app.clone().oneshot(request).await.unwrap().status(),
+            expected
+        );
+    }
     assert_eq!(
         call(&app, "GET", "/health/live", None, None).await.0,
         StatusCode::OK

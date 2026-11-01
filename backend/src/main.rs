@@ -45,6 +45,10 @@ enum Command {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // Install before SQLx can initialize a TLS client for host PostgreSQL.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|_| anyhow::anyhow!("TLS provider initialization failed"))?;
     tracing_subscriber::fmt()
         .json()
         .with_env_filter("replab_server=info")
@@ -53,7 +57,7 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let cli = Cli::parse();
     if let Some(path) = cli.env_file {
-        dotenvy::from_path(path).context("Cannot load configuration file")?;
+        dotenvy::from_path_override(path).context("Cannot load configuration file")?;
     }
     if let Command::Configure { directory, bind_ip } = cli.command {
         return config::configure(&directory, bind_ip);
@@ -98,9 +102,6 @@ async fn main() -> anyhow::Result<()> {
                 .with_graceful_shutdown(shutdown())
                 .await?;
             } else {
-                rustls::crypto::ring::default_provider()
-                    .install_default()
-                    .map_err(|_| anyhow::anyhow!("TLS provider initialization failed"))?;
                 let tls = axum_server::tls_rustls::RustlsConfig::from_pem_file(
                     &state.config.cert,
                     &state.config.key,
