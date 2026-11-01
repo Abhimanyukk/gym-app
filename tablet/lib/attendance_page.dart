@@ -5,11 +5,13 @@ import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import 'app_loading.dart';
 import 'sample_attendance.dart';
+import 'replab_api.dart';
 
 class AttendancePage extends StatefulWidget {
-  const AttendancePage({super.key, this.showSampleData = false});
+  const AttendancePage({super.key, this.showSampleData = false, this.api});
 
   final bool showSampleData;
+  final RepLabApi? api;
 
   @override
   State<AttendancePage> createState() => _AttendancePageState();
@@ -599,11 +601,35 @@ class _AttendancePageState extends State<AttendancePage>
                         Expanded(
                           child: DumbbellRefresh(
                             key: const ValueKey('attendance-refresh'),
-                            onRefresh: () => refreshLocalView(
-                              context,
-                              preview: _isPreview,
-                              rebuild: () => setState(() {}),
-                            ),
+                            onRefresh: widget.api != null
+                                ? () async {
+                                    try {
+                                      await widget.api!.ready();
+                                      if (!context.mounted) return;
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Server connected. Attendance endpoints are not implemented yet.',
+                                              ),
+                                            ),
+                                          );
+                                    } on ApiException catch (error) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                              SnackBar(
+                                                content: Text(error.message),
+                                              ),
+                                            );
+                                      }
+                                    }
+                                  }
+                                : () => refreshLocalView(
+                                    context,
+                                    preview: _isPreview,
+                                    rebuild: () => setState(() {}),
+                                  ),
                             child: NotificationListener<ScrollNotification>(
                               onNotification: _onListScroll,
                               child: Scrollbar(

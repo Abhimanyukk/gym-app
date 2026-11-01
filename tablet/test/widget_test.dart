@@ -13,6 +13,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/dashboard_screen.dart';
 import 'package:gym_management_app/main.dart';
 import 'package:gym_management_app/preview.dart' as preview;
+import 'package:gym_management_app/replab_api.dart';
+
+import 'api_fixture.dart';
 
 void main() {
   test('browser preview cannot run on a native target', () {
@@ -30,10 +33,12 @@ void main() {
     expect(find.text('RepLab Fitness'), findsOneWidget);
     expect(find.text('Management & Attendance System'), findsOneWidget);
     expect(find.text('Login'), findsOneWidget);
-    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(TextField), findsNWidgets(3));
     expect(find.byIcon(Icons.lock_outline_rounded), findsOneWidget);
     expect(
-      find.text('Use your tablet PIN or biometrics to continue.'),
+      find.text(
+        'Sign in with your gym admin account and unlock using the tablet PIN or biometrics.',
+      ),
       findsOneWidget,
     );
     expect(
@@ -82,6 +87,9 @@ void main() {
     final messenger = tester.binding.defaultBinaryMessenger;
     var authenticated = false;
     var authenticationCalls = 0;
+    final fixture = ApiFixture()..allowLogin = false;
+    final api = RepLabApi(client: fixture.client);
+    addTearDown(api.dispose);
 
     messenger.setMockMethodCallHandler(channel, (call) async {
       expect(call.method, 'authenticate');
@@ -91,12 +99,14 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
 
-    await tester.pumpWidget(const GymManagementApp());
+    await tester.pumpWidget(GymManagementApp(api: api));
     await tester.pumpAndSettle();
+    await enterServerLogin(tester);
     await tester.tap(find.text('Login'));
     await tester.pumpAndSettle();
 
     expect(authenticationCalls, 1);
+    expect(fixture.requests, isEmpty);
     expect(find.byType(DashboardScreen), findsNothing);
     expect(find.text('Authentication was not completed.'), findsOneWidget);
 
@@ -105,6 +115,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(authenticationCalls, 2);
+    expect(find.byType(DashboardScreen), findsNothing);
+    expect(find.text('Email or password is incorrect.'), findsOneWidget);
+    fixture.allowLogin = true;
+    await tester.ensureVisible(find.text('Login'));
+    await tester.tap(find.text('Login'));
+    await tester.pumpAndSettle();
+    expect(authenticationCalls, 3);
     expect(find.byType(DashboardScreen), findsOneWidget);
     expect(
       find.descendant(
@@ -118,6 +135,7 @@ void main() {
       Navigator.of(tester.element(find.byType(DashboardScreen))).canPop(),
       isFalse,
     );
+    api.clearSession();
   });
 
   testWidgets('sidebar switches between all four section bodies', (

@@ -5,6 +5,9 @@ services:
     container_name: gym-app-preview
     init: true
     working_dir: /workspace/tablet
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-https://localhost:8001}
+      SHOW_SAMPLE_DATA: ${SHOW_SAMPLE_DATA:-false}
     volumes:
       - .:/workspace
       - preview-pub-cache:/root/.pub-cache

@@ -10,11 +10,13 @@ import 'member_profile.dart';
 import 'members_page.dart';
 import 'settings_page.dart';
 import 'settings_preview.dart';
+import 'replab_api.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key, this.showSampleData = false});
+  const DashboardScreen({super.key, this.showSampleData = false, this.api});
 
   final bool showSampleData;
+  final RepLabApi? api;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -30,6 +32,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ];
 
   int _selectedIndex = 0;
+  Map<String, dynamic>? _summary;
+  String? _error;
+  bool _loading = false;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.api != null) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final summary = await widget.api!.dashboard();
+      if (mounted) setState(() => _summary = summary);
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   // Keep preview registrations when switching sidebar sections; never persist
   // test member details or pretend this is the staff-authorized backend.
   late final _members = kDebugMode && widget.showSampleData
@@ -154,6 +181,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           setState(
                                             () => _selectedIndex = index,
                                           );
+                                          if (index == 0 &&
+                                              widget.api != null) {
+                                            _refresh();
+                                          }
                                         },
                                       ),
                                     );
@@ -177,33 +208,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           padding: const EdgeInsets.all(32),
                           child: switch (_selectedIndex) {
                             1 => AttendancePage(
+                              api: widget.api,
                               showSampleData:
                                   kDebugMode && widget.showSampleData,
                             ),
                             2 => MembersPage(
+                              api: widget.api,
                               members: _members,
                               showSampleData:
                                   kDebugMode && widget.showSampleData,
                             ),
-                            _ => SettingsPage(preview: _settings),
+                            _ => SettingsPage(
+                              preview: _settings,
+                              api: widget.api,
+                            ),
                           },
                         )
                       : DumbbellRefresh(
                           key: const ValueKey('dashboard-refresh'),
-                          onRefresh: () => refreshLocalView(
-                            context,
-                            preview: kDebugMode && widget.showSampleData,
-                            rebuild: () => setState(() {}),
-                          ),
+                          onRefresh: widget.api != null
+                              ? _refresh
+                              : () => refreshLocalView(
+                                  context,
+                                  preview: kDebugMode && widget.showSampleData,
+                                  rebuild: () => setState(() {}),
+                                ),
                           child: SingleChildScrollView(
                             key: PageStorageKey(section.title),
                             physics: const AlwaysScrollableScrollPhysics(
                               parent: ClampingScrollPhysics(),
                             ),
                             padding: const EdgeInsets.all(32),
-                            child: DashboardOverview(
-                              showSampleData:
-                                  kDebugMode && widget.showSampleData,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (_loading)
+                                  const Center(child: DumbbellLoader()),
+                                if (_error != null) ...[
+                                  Text(
+                                    _error!,
+                                    style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .error,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: _refresh,
+                                    child: const Text('Retry'),
+                                  ),
+                                  if (_summary != null)
+                                    const Text(
+                                      'Previously loaded totals · Pull down to retry.',
+                                    ),
+                                  const SizedBox(height: 16),
+                                ],
+                                DashboardOverview(
+                                  showSampleData:
+                                      kDebugMode && widget.showSampleData,
+                                  summary: _summary,
+                                  adminName: widget.api?.admin?.name,
+                                ),
+                              ],
                             ),
                           ),
                         ),

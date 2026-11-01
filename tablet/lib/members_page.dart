@@ -1,19 +1,24 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_loading.dart';
 import 'member_profile.dart';
 import 'sample_attendance.dart';
+import 'replab_api.dart';
 
 class MembersPage extends StatefulWidget {
   const MembersPage({
     super.key,
     required this.members,
     this.showSampleData = false,
+    this.api,
   });
 
   final List<MemberProfile> members;
   final bool showSampleData;
+  final RepLabApi? api;
 
   @override
   State<MembersPage> createState() => _MembersPageState();
@@ -24,11 +29,65 @@ class _MembersPageState extends State<MembersPage> {
   final _scroll = ScrollController();
   String _filter = 'All members';
   bool _nameOrder = false;
+  final _liveMembers = <MemberProfile>[];
+  int _total = 0;
+  int _request = 0;
+  bool _loading = false;
+  String? _error;
+  Timer? _debounce;
 
   bool get _isPreview => kDebugMode && widget.showSampleData;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.api != null) _load();
+  }
+
+  Future<void> _load({bool append = false}) async {
+    final request = ++_request;
+    _debounce?.cancel();
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final result = await widget.api!.members(
+        q: _search.text.trim(),
+        active: _filter == 'Active records'
+            ? true
+            : _filter == 'Inactive records'
+            ? false
+            : null,
+        offset: append ? _liveMembers.length : 0,
+      );
+      if (!mounted || request != _request) return;
+      setState(() {
+        if (!append) _liveMembers.clear();
+        _liveMembers.addAll(result.items);
+        _total = result.total;
+      });
+    } on ApiException catch (error) {
+      if (mounted && request == _request) {
+        setState(() => _error = error.message);
+      }
+    } finally {
+      if (mounted && request == _request) setState(() => _loading = false);
+    }
+  }
+
+  void _queryChanged() {
+    _update(() {});
+    if (widget.api == null) return;
+    ++_request; // Ignore any previous query still in flight.
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () => _load());
+  }
+
+  @override
   void dispose() {
+    _debounce?.cancel();
+    ++_request;
     _search.dispose();
     _scroll.dispose();
     super.dispose();
@@ -43,20 +102,27 @@ class _MembersPageState extends State<MembersPage> {
     final member = await showDialog<MemberProfile>(
       context: context,
       barrierDismissible: false,
-      builder: (_) =>
-          _AddMemberDialog(members: widget.members, canSave: _isPreview),
+      builder: (_) => _AddMemberDialog(
+        members: widget.members,
+        canSave: _isPreview || widget.api != null,
+        api: widget.api,
+      ),
     );
     if (member == null || !mounted) return;
     _update(() {
-      widget.members.add(member);
+      if (_isPreview) widget.members.add(member);
       _search.clear();
       _filter = 'All members';
       _nameOrder = false;
     });
+    if (widget.api != null) await _load();
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'Member added to preview only · Not saved to the server.',
+          widget.api != null
+              ? 'Member saved to the server.'
+              : 'Member added to preview only · Not saved to the server.',
         ),
       ),
     );
@@ -66,17 +132,26 @@ class _MembersPageState extends State<MembersPage> {
   void _openMember(MemberProfile member) {
     showDialog<void>(
       context: context,
-      builder: (_) => _MemberDetails(member: member),
+      builder: (_) => widget.api != null
+          ? _LiveMemberDetails(api: widget.api!, member: member)
+          : _MemberDetails(member: member),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final members = _isPreview ? widget.members : <MemberProfile>[];
+    final members = widget.api != null
+        ? _liveMembers
+        : _isPreview
+        ? widget.members
+        : <MemberProfile>[];
     final query = _search.text.trim().toLowerCase();
     final visible =
         members.where((member) {
+          if (widget.api != null) {
+            return true; // Server owns search/filter/pagination.
+          }
           return (_filter == 'All members' ||
                   _filter == (member.membership?.label ?? 'No plan')) &&
               [
@@ -155,7 +230,9 @@ class _MembersPageState extends State<MembersPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _isPreview
+                      widget.api != null
+                          ? _error ?? 'Registered members · Server records'
+                          : _isPreview
                           ? compact
                                 ? 'Sample data · Temporary preview'
                                 : 'Sample data · Changes last until preview restart.'
@@ -170,7 +247,7 @@ class _MembersPageState extends State<MembersPage> {
                     TextField(
                       key: const ValueKey('members-search'),
                       controller: _search,
-                      onChanged: (_) => _update(() {}),
+                      onChanged: (_) => _queryChanged(),
                       decoration: InputDecoration(
                         labelText: 'Search name, number or phone',
                         prefixIcon: const Icon(Icons.search_rounded),
@@ -179,7 +256,10 @@ class _MembersPageState extends State<MembersPage> {
                             : IconButton(
                                 key: const ValueKey('members-clear-search'),
                                 tooltip: 'Clear search',
-                                onPressed: () => _update(_search.clear),
+                                onPressed: () {
+                                  _search.clear();
+                                  _queryChanged();
+                                },
                                 icon: const Icon(Icons.close_rounded),
                               ),
                         border: OutlineInputBorder(
@@ -195,15 +275,22 @@ class _MembersPageState extends State<MembersPage> {
                         children: [
                           for (final filter in [
                             'All members',
-                            ...MembershipStatus.values.map((s) => s.label),
-                            'No plan',
+                            if (widget.api != null) ...[
+                              'Active records',
+                              'Inactive records',
+                            ] else ...[
+                              ...MembershipStatus.values.map((s) => s.label),
+                              'No plan',
+                            ],
                           ])
                             ChoiceChip(
                               key: ValueKey('members-filter-$filter'),
                               label: Text(filter),
                               selected: _filter == filter,
-                              onSelected: (_) =>
-                                  _update(() => _filter = filter),
+                              onSelected: (_) {
+                                _filter = filter;
+                                _queryChanged();
+                              },
                             ),
                         ],
                       ),
@@ -213,7 +300,14 @@ class _MembersPageState extends State<MembersPage> {
                       children: [
                         Expanded(
                           child: Text(
-                            _isPreview
+                            widget.api != null
+                                ? visible.isEmpty &&
+                                          (_loading || _error != null)
+                                      ? _loading
+                                            ? 'Loading member records…'
+                                            : 'Member records unavailable'
+                                      : '${visible.length} of $_total members'
+                                : _isPreview
                                 ? '${visible.length} of ${members.length} members'
                                 : 'Member records unavailable',
                             key: const ValueKey('members-count'),
@@ -222,7 +316,11 @@ class _MembersPageState extends State<MembersPage> {
                         ),
                         IconButton(
                           key: const ValueKey('members-sort'),
-                          tooltip: _nameOrder ? 'Name A–Z' : 'Member number',
+                          tooltip: widget.api != null
+                              ? 'Sort loaded records: ${_nameOrder ? 'Name A–Z' : 'Member number'}'
+                              : _nameOrder
+                              ? 'Name A–Z'
+                              : 'Member number',
                           onPressed: () =>
                               _update(() => _nameOrder = !_nameOrder),
                           icon: const Icon(Icons.sort_by_alpha_rounded),
@@ -237,14 +335,26 @@ class _MembersPageState extends State<MembersPage> {
                           style: theme.textTheme.labelLarge!.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Expanded(child: Text('Member')),
-                              SizedBox(width: 20),
-                              SizedBox(width: 140, child: Text('Plan')),
-                              SizedBox(width: 20),
-                              SizedBox(width: 144, child: Text('Membership')),
-                              SizedBox(width: 36),
+                              const Expanded(child: Text('Member')),
+                              const SizedBox(width: 20),
+                              SizedBox(
+                                width: 140,
+                                child: Text(
+                                  widget.api != null ? 'Phone' : 'Plan',
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              SizedBox(
+                                width: 144,
+                                child: Text(
+                                  widget.api != null
+                                      ? 'Record status'
+                                      : 'Membership',
+                                ),
+                              ),
+                              const SizedBox(width: 36),
                             ],
                           ),
                         ),
@@ -252,11 +362,13 @@ class _MembersPageState extends State<MembersPage> {
                     Expanded(
                       child: DumbbellRefresh(
                         key: const ValueKey('members-refresh'),
-                        onRefresh: () => refreshLocalView(
-                          context,
-                          preview: _isPreview,
-                          rebuild: () => setState(() {}),
-                        ),
+                        onRefresh: widget.api != null
+                            ? () => _load()
+                            : () => refreshLocalView(
+                                context,
+                                preview: _isPreview,
+                                rebuild: () => setState(() {}),
+                              ),
                         child: Scrollbar(
                           controller: _scroll,
                           child: ListView.separated(
@@ -266,13 +378,47 @@ class _MembersPageState extends State<MembersPage> {
                               parent: ClampingScrollPhysics(),
                             ),
                             padding: EdgeInsets.zero,
-                            itemCount: visible.isEmpty ? 1 : visible.length,
+                            itemCount:
+                                (visible.isEmpty ? 1 : visible.length) +
+                                (widget.api != null &&
+                                        visible.isNotEmpty &&
+                                        (_loading ||
+                                            _error != null ||
+                                            _liveMembers.length < _total)
+                                    ? 1
+                                    : 0),
                             separatorBuilder: (_, _) => const Divider(
                               height: 1,
                               color: Color(0xFFDDDDDD),
                             ),
                             itemBuilder: (context, index) {
+                              if (index == visible.length &&
+                                  visible.isNotEmpty) {
+                                return Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: _loading
+                                      ? const Center(child: DumbbellLoader())
+                                      : TextButton(
+                                          key: const ValueKey(
+                                            'members-load-more',
+                                          ),
+                                          onPressed: () =>
+                                              _load(append: _error == null),
+                                          child: Text(
+                                            _error != null
+                                                ? 'Retry loading members'
+                                                : 'Load more members',
+                                          ),
+                                        ),
+                                );
+                              }
                               if (visible.isEmpty) {
+                                if (_loading) {
+                                  return const Padding(
+                                    padding: EdgeInsets.all(32),
+                                    child: Center(child: DumbbellLoader()),
+                                  );
+                                }
                                 return Padding(
                                   padding: const EdgeInsets.symmetric(
                                     vertical: 32,
@@ -280,7 +426,9 @@ class _MembersPageState extends State<MembersPage> {
                                   child: Column(
                                     children: [
                                       Icon(
-                                        _isPreview
+                                        widget.api != null && _error != null
+                                            ? Icons.cloud_off_outlined
+                                            : widget.api != null || _isPreview
                                             ? Icons.person_search_rounded
                                             : Icons.cloud_off_outlined,
                                         size: 36,
@@ -289,7 +437,11 @@ class _MembersPageState extends State<MembersPage> {
                                       ),
                                       const SizedBox(height: 16),
                                       Text(
-                                        _isPreview
+                                        widget.api != null
+                                            ? _error != null
+                                                  ? 'Unable to load members'
+                                                  : 'No matching members'
+                                            : _isPreview
                                             ? 'No matching members'
                                             : 'Waiting for member connection',
                                         textAlign: TextAlign.center,
@@ -297,11 +449,18 @@ class _MembersPageState extends State<MembersPage> {
                                       ),
                                       const SizedBox(height: 8),
                                       Text(
-                                        _isPreview
+                                        widget.api != null
+                                            ? _error ?? 'No registered members match this search.'
+                                            : _isPreview
                                             ? 'Try another search or membership filter.'
                                             : 'Registered members will appear once the backend is connected.',
                                         textAlign: TextAlign.center,
                                       ),
+                                      if (widget.api != null)
+                                        TextButton(
+                                          onPressed: () => _load(),
+                                          child: const Text('Refresh members'),
+                                        ),
                                       if (_isPreview)
                                         TextButton(
                                           key: const ValueKey('members-reset'),
@@ -366,7 +525,10 @@ class _MembersPageState extends State<MembersPage> {
                                               SizedBox(
                                                 width: 140,
                                                 child: Text(
-                                                  member.plan ?? 'No plan',
+                                                  widget.api != null
+                                                      ? member.phone
+                                                      : member.plan ??
+                                                            'No plan',
                                                 ),
                                               ),
                                               const SizedBox(width: 20),
@@ -400,7 +562,10 @@ class _MembersPageState extends State<MembersPage> {
                                                     WrapCrossAlignment.center,
                                                 children: [
                                                   Text(
-                                                    member.plan ?? 'No plan',
+                                                    widget.api != null
+                                                        ? member.phone
+                                                        : member.plan ??
+                                                              'No plan',
                                                   ),
                                                   _MembershipBadge(
                                                     member: member,
@@ -458,20 +623,74 @@ class _MembershipBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(
-      color: member.membership?.color ?? const Color(0xFF616161),
+      color: member.id != null
+          ? member.isActive
+                ? const Color(0xFF286455)
+                : const Color(0xFF616161)
+          : member.membership?.color ?? const Color(0xFF616161),
       borderRadius: BorderRadius.circular(100),
     ),
     child: Text(
-      member.membership?.label ?? 'No plan',
+      member.id != null
+          ? member.isActive
+                ? 'Active record'
+                : 'Inactive record'
+          : member.membership?.label ?? 'No plan',
       style: Theme.of(context).textTheme.labelMedium
           ?.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
     ),
   );
 }
 
-class _MemberDetails extends StatelessWidget {
-  const _MemberDetails({required this.member});
+class _LiveMemberDetails extends StatefulWidget {
+  const _LiveMemberDetails({required this.api, required this.member});
+  final RepLabApi api;
   final MemberProfile member;
+  @override
+  State<_LiveMemberDetails> createState() => _LiveMemberDetailsState();
+}
+
+class _LiveMemberDetailsState extends State<_LiveMemberDetails> {
+  late Future<MemberProfile> _details = widget.api.member(widget.member.id!);
+  @override
+  Widget build(BuildContext context) => FutureBuilder<MemberProfile>(
+    future: _details,
+    builder: (context, snapshot) {
+      if (snapshot.hasData) {
+        return _MemberDetails(member: snapshot.data!, preview: false);
+      }
+      return Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (snapshot.hasError) ...[
+                Text(snapshot.error.toString()),
+                TextButton(
+                  onPressed: () => setState(() {
+                    _details = widget.api.member(widget.member.id!);
+                  }),
+                  child: const Text('Retry'),
+                ),
+              ] else
+                const DumbbellLoader(label: 'Loading member details'),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _MemberDetails extends StatelessWidget {
+  const _MemberDetails({required this.member, this.preview = true});
+  final MemberProfile member;
+  final bool preview;
 
   @override
   Widget build(BuildContext context) {
@@ -482,10 +701,14 @@ class _MemberDetails extends StatelessWidget {
         : '${localizations.formatMediumDate(value)} ${value.year}';
     final now = gymNow();
     final visits =
-        [
-            ...sampleAttendanceFor(now),
-            ...sampleAttendanceFor(DateTime(now.year, now.month, now.day - 1)),
-          ].where((entry) => entry.memberNumber == member.number).toList()
+        !preview
+              ? <SampleCheckIn>[]
+              : [
+                  ...sampleAttendanceFor(now),
+                  ...sampleAttendanceFor(
+                    DateTime(now.year, now.month, now.day - 1),
+                  ),
+                ].where((entry) => entry.memberNumber == member.number).toList()
           ..sort((a, b) => b.time.compareTo(a.time));
 
     return Dialog(
@@ -552,7 +775,7 @@ class _MemberDetails extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'Preview profile · Not a server record.',
+                      preview ? 'Preview profile · Not a server record.' : 'Saved server record · Record status does not imply a valid subscription.',
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: 24),
@@ -572,8 +795,18 @@ class _MemberDetails extends StatelessWidget {
                     _DetailsSection(
                       title: 'Membership',
                       fields: [
-                        ('Plan', member.plan ?? 'No plan assigned'),
-                        ('Status', member.membership?.label ?? 'No plan'),
+                        (
+                          'Plan',
+                          !preview
+                              ? 'Subscriptions are not implemented'
+                              : member.plan ?? 'No plan assigned',
+                        ),
+                        (
+                          'Status',
+                          !preview
+                              ? 'Unavailable'
+                              : member.membership?.label ?? 'No plan',
+                        ),
                         ('Starts on', date(member.planStart)),
                         ('Valid through', date(member.planEnd)),
                       ],
@@ -586,7 +819,14 @@ class _MemberDetails extends StatelessWidget {
                     const SizedBox(height: 20),
                     _DetailsSection(
                       title: 'Recent attendance',
-                      fields: visits.isEmpty
+                      fields: !preview
+                          ? [
+                              (
+                                'Attendance',
+                                'Attendance is not implemented on the server.',
+                              ),
+                            ]
+                          : visits.isEmpty
                           ? [
                               (
                                 'Sample check-ins',
@@ -602,12 +842,14 @@ class _MemberDetails extends StatelessWidget {
                             ],
                     ),
                     const SizedBox(height: 20),
-                    const _DetailsSection(
+                    _DetailsSection(
                       title: 'Payments & subscription history',
                       fields: [
                         (
                           'Records unavailable',
-                          'Billing and subscription history will appear once the backend is connected. No payments are recorded in this preview.',
+                          preview
+                              ? 'Billing and subscription history will appear once the backend is connected. No payments are recorded in this preview.'
+                              : 'Billing and subscriptions are not implemented on the server.',
                         ),
                       ],
                     ),
@@ -684,9 +926,14 @@ class _DetailsSection extends StatelessWidget {
 }
 
 class _AddMemberDialog extends StatefulWidget {
-  const _AddMemberDialog({required this.members, required this.canSave});
+  const _AddMemberDialog({
+    required this.members,
+    required this.canSave,
+    this.api,
+  });
   final List<MemberProfile> members;
   final bool canSave;
+  final RepLabApi? api;
 
   @override
   State<_AddMemberDialog> createState() => _AddMemberDialogState();
@@ -701,6 +948,9 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   final _emergency = TextEditingController();
   final _notes = TextEditingController();
   DateTime _joined = DateUtils.dateOnly(gymNow());
+  bool _saving = false;
+  bool _uncertain = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -728,8 +978,43 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     return null;
   }
 
-  void _save() {
-    if (!widget.canSave || !_form.currentState!.validate()) return;
+  Future<void> _save() async {
+    if (_saving ||
+        _uncertain ||
+        !widget.canSave ||
+        !_form.currentState!.validate()) {
+      return;
+    }
+    if (widget.api != null) {
+      setState(() {
+        _saving = true;
+        _error = null;
+      });
+      try {
+        final saved = await widget.api!.addMember({
+          'name': _name.text.trim(),
+          'phone': _phone.text.trim(),
+          'email': _email.text.trim(),
+          'address': _address.text.trim(),
+          'emergency_phone': _emergency.text.trim(),
+          'notes': _notes.text.trim(),
+          'joined':
+              '${_joined.year.toString().padLeft(4, '0')}-${_joined.month.toString().padLeft(2, '0')}-${_joined.day.toString().padLeft(2, '0')}',
+          'is_active': true,
+        });
+        if (mounted) Navigator.pop(context, saved);
+      } on ApiException catch (error) {
+        if (mounted) {
+          setState(() {
+            _error = error.message;
+            _uncertain = error.uncertain;
+          });
+        }
+      } finally {
+        if (mounted) setState(() => _saving = false);
+      }
+      return;
+    }
     var index = 1;
     while (widget.members.any(
       (member) => member.number == 'M-${index.toString().padLeft(4, '0')}',
@@ -805,94 +1090,114 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
       TextFormField(
         key: const ValueKey('member-notes'),
         controller: _notes,
-        maxLength: 1000,
+        maxLength: 2000,
         maxLines: 3,
         decoration: const InputDecoration(labelText: 'Notes (optional)'),
       ),
     ];
-    return Dialog(
-      key: const ValueKey('member-add-dialog'),
-      insetPadding: const EdgeInsets.all(16),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Add member', style: theme.textTheme.titleLarge),
-            ),
-            const Divider(height: 1),
-            Flexible(
-              child: SingleChildScrollView(
-                key: const ValueKey('member-form-scroll'),
+    return PopScope(
+      canPop: !_saving,
+      child: Dialog(
+        key: const ValueKey('member-add-dialog'),
+        insetPadding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
                 padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _form,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        widget.canSave
-                            ? 'Preview only · Member details are temporary and not saved to the server. Use test data.'
-                            : 'Member registration is not connected yet. Saving requires the backend and staff authorization.',
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 20),
-                      for (final field in fields) ...[
-                        field,
-                        const SizedBox(height: 12),
-                      ],
-                      OutlinedButton.icon(
-                        key: const ValueKey('member-joined'),
-                        onPressed: () async {
-                          final date = await showDatePicker(
-                            context: context,
-                            initialDate: _joined,
-                            firstDate: DateTime(2000),
-                            lastDate: DateUtils.dateOnly(gymNow()),
-                          );
-                          if (date != null && mounted) {
-                            setState(() => _joined = date);
-                          }
-                        },
-                        icon: const Icon(Icons.calendar_today_outlined),
-                        label: Text(
-                          'Joined on ${MaterialLocalizations.of(context).formatCompactDate(_joined)}',
+                child: Text('Add member', style: theme.textTheme.titleLarge),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: SingleChildScrollView(
+                  key: const ValueKey('member-form-scroll'),
+                  padding: const EdgeInsets.all(24),
+                  child: Form(
+                    key: _form,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          widget.api != null
+                              ? 'Register this member in the gym database. No plan, payment or biometric record is created.'
+                              : widget.canSave
+                              ? 'Preview only · Member details are temporary and not saved to the server. Use test data.'
+                              : 'Member registration is not connected yet. Saving requires the backend and staff authorization.',
+                          style: theme.textTheme.bodyMedium,
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Member number is assigned automatically. No plan or payment is created by this form.',
-                      ),
-                    ],
+                        const SizedBox(height: 20),
+                        if (_error != null) ...[
+                          Text(
+                            _error!,
+                            style: TextStyle(color: theme.colorScheme.error),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        for (final field in fields) ...[
+                          field,
+                          const SizedBox(height: 12),
+                        ],
+                        OutlinedButton.icon(
+                          key: const ValueKey('member-joined'),
+                          onPressed: () async {
+                            final date = await showDatePicker(
+                              context: context,
+                              initialDate: _joined,
+                              firstDate: DateTime(2000),
+                              lastDate: DateUtils.dateOnly(gymNow()),
+                            );
+                            if (date != null && mounted) {
+                              setState(() => _joined = date);
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_today_outlined),
+                          label: Text(
+                            'Joined on ${MaterialLocalizations.of(context).formatCompactDate(_joined)}',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Member number is assigned automatically. No plan or payment is created by this form.',
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: OverflowBar(
-                alignment: MainAxisAlignment.end,
-                spacing: 12,
-                overflowSpacing: 8,
-                children: [
-                  TextButton(
-                    key: const ValueKey('member-add-cancel'),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  FilledButton(
-                    key: const ValueKey('member-add-save'),
-                    onPressed: widget.canSave ? _save : null,
-                    child: const Text('Add to preview'),
-                  ),
-                ],
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: OverflowBar(
+                  alignment: MainAxisAlignment.end,
+                  spacing: 12,
+                  overflowSpacing: 8,
+                  children: [
+                    TextButton(
+                      key: const ValueKey('member-add-cancel'),
+                      onPressed: _saving ? null : () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      key: const ValueKey('member-add-save'),
+                      onPressed: widget.canSave && !_saving && !_uncertain
+                          ? _save
+                          : null,
+                      child: _saving
+                          ? const DumbbellLoader(size: 22)
+                          : Text(
+                              widget.api != null
+                                  ? 'Save member'
+                                  : 'Add to preview',
+                            ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

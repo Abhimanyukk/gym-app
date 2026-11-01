@@ -97,7 +97,7 @@ void main() {
     await tapSetting(tester, 'settings-dialog-save');
     expect(find.text('Enter the admin’s full name'), findsOneWidget);
     expect(find.text('Enter a valid email address'), findsOneWidget);
-    expect(find.text('Use at least 15 characters'), findsOneWidget);
+    expect(find.text('Use 15–128 characters'), findsOneWidget);
     await enterSetting(tester, 'settings-admin-name', 'Test Admin Two');
     await enterSetting(tester, 'settings-admin-email', 'ADMIN@example.com');
     await enterSetting(tester, 'settings-new-password', 'preview password two');

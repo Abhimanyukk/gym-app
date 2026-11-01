@@ -31,6 +31,8 @@ def main() -> int:
             "flutter", "run", "-d", "web-server", "-t", "lib/preview.dart",
             "--web-hostname=0.0.0.0", "--web-port=8080",
             "--no-web-resources-cdn", "--no-pub", f"--pid-file={pid_file}",
+            f"--dart-define=API_BASE_URL={os.environ.get('API_BASE_URL', 'https://localhost:8001')}",
+            f"--dart-define=SHOW_SAMPLE_DATA={os.environ.get('SHOW_SAMPLE_DATA', 'false')}",
         ],
         cwd=tablet,
     )

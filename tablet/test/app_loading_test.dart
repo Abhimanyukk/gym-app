@@ -9,6 +9,8 @@ import 'package:gym_management_app/app_loading.dart';
 import 'package:gym_management_app/dashboard_screen.dart';
 import 'package:gym_management_app/main.dart';
 
+import 'api_fixture.dart';
+
 void main() {
   testWidgets(
     'shared loader rotates the existing asset and respects reduced motion',
@@ -248,6 +250,7 @@ void main() {
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     await tester.pumpWidget(const GymManagementApp());
     await tester.pumpAndSettle();
+    await enterServerLogin(tester);
     await tester.tap(find.text('Login'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));

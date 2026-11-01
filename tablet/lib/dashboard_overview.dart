@@ -5,9 +5,16 @@ import 'package:flutter/material.dart';
 import 'sample_attendance.dart';
 
 class DashboardOverview extends StatelessWidget {
-  const DashboardOverview({super.key, this.showSampleData = false});
+  const DashboardOverview({
+    super.key,
+    this.showSampleData = false,
+    this.summary,
+    this.adminName,
+  });
 
   final bool showSampleData;
+  final Map<String, dynamic>? summary;
+  final String? adminName;
 
   // dover-gain-efficient: reference data is only enabled by the debug preview;
   // do not invent live totals, attendance, staff identity, or revenue calculations.
@@ -38,7 +45,10 @@ class DashboardOverview extends StatelessWidget {
           key: const ValueKey('dashboard-overview'),
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _DashboardHeader(showSampleData: showSampleData),
+            _DashboardHeader(
+              showSampleData: showSampleData,
+              adminName: adminName,
+            ),
             const SizedBox(height: 28),
             Wrap(
               spacing: 20,
@@ -66,7 +76,12 @@ class DashboardOverview extends StatelessWidget {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              showSampleData ? metric.value : '—',
+                              showSampleData
+                                  ? metric.value
+                                  : metric.title == 'Total Members' &&
+                                        summary != null
+                                  ? '${summary!['total_members']}'
+                                  : '—',
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -146,6 +161,8 @@ class DashboardOverview extends StatelessWidget {
             Text(
               showSampleData
                   ? 'Sample data · Backend and staff authorization are not connected.'
+                  : summary != null
+                  ? '${summary!['active_member_records']} active member records · Attendance, plans and billing are not implemented on the server.'
                   : 'Backend and staff authorization are not connected. Totals are unavailable.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
@@ -159,9 +176,10 @@ class DashboardOverview extends StatelessWidget {
 }
 
 class _DashboardHeader extends StatefulWidget {
-  const _DashboardHeader({required this.showSampleData});
+  const _DashboardHeader({required this.showSampleData, this.adminName});
 
   final bool showSampleData;
+  final String? adminName;
 
   @override
   State<_DashboardHeader> createState() => _DashboardHeaderState();
@@ -197,7 +215,11 @@ class _DashboardHeaderState extends State<_DashboardHeader> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Good $period${widget.showSampleData ? ', Admin' : ''}',
+          'Good $period${widget.adminName != null
+              ? ', ${widget.adminName}'
+              : widget.showSampleData
+              ? ', Admin'
+              : ''}',
           key: const ValueKey('dashboard-greeting'),
           style: theme.textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.w600,

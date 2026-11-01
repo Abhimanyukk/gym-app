@@ -36,6 +36,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_svg: ^2.3.2
   local_auth: ^3.0.2
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:
@@ -62,6 +63,7 @@ flutter:
   assets:
     - assets/images/Splash.png
     - assets/icons/
+    - assets/certificates/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

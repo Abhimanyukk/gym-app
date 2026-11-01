@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Deployment-specific public trust anchors are bundled locally, not committed.
+/assets/certificates/*.crt
+/assets/certificates/*.pem

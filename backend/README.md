@@ -29,14 +29,16 @@ libraries; build against an OS compatible with the Pi, not Windows.
 - HTTPS, 16-KiB JSON body limit, 32 concurrent requests, request IDs, health checks.
 - Explicit non-destructive migrations and native backup/restore-check scripts.
 
-Not implemented: Flutter API integration, attendance/terminal ingestion, member
+Flutter API integration is implemented in `../tablet/`; see its README for
+login, certificate trust and Android builds.
+Not implemented: attendance/terminal ingestion, member
 editing/deactivation, staff roles, subscriptions, payments, invoices, expenses,
 reports, automatic backup scheduling, or forgotten-password recovery.
 Unsupported dashboard totals are null, not fake zeroes. An active member record
 does not imply a valid subscription or entry rights.
 
-The tablet still uses its disconnected/preview flows. Device PIN/biometrics do
-not authenticate an administrator to this server.
+The tablet uses these REST endpoints after server login. Device PIN/biometrics
+alone do not authenticate an administrator to this server.
 
 ## 1. Prepare the Pi
 

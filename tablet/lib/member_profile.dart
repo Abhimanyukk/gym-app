@@ -13,6 +13,8 @@ class MemberProfile {
     this.plan,
     this.planStart,
     this.planEnd,
+    this.id,
+    this.isActive = true,
   });
 
   final String number;
@@ -26,6 +28,21 @@ class MemberProfile {
   final String? plan;
   final DateTime? planStart;
   final DateTime? planEnd;
+  final String? id;
+  final bool isActive;
+
+  factory MemberProfile.fromJson(Map<String, dynamic> data) => MemberProfile(
+    id: data['id'] as String,
+    number: data['number'] as String,
+    name: data['name'] as String,
+    phone: data['phone'] as String,
+    joined: DateTime.parse(data['joined'] as String),
+    email: data['email'] as String,
+    address: data['address'] as String,
+    emergencyPhone: data['emergency_phone'] as String,
+    notes: data['notes'] as String,
+    isActive: data['is_active'] as bool,
+  );
 
   MembershipStatus? get membership {
     final end = planEnd;
@@ -44,6 +61,7 @@ class MemberProfile {
 
   String get initials {
     final words = name.trim().split(RegExp(r'\s+'));
+    if (words.first.isEmpty) return '?';
     return '${words.first[0]}${words.length > 1 ? words.last[0] : ''}';
   }
 }

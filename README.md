@@ -12,8 +12,10 @@ three-admin limit, gym settings, and basic member registration/list/detail APIs.
 See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testing,
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
-or Docker. Do not deploy this workspace's Flutter development container. Tablet API integration
-and the physical attendance-terminal integration are separate next steps.
+or Docker. Do not deploy this workspace's Flutter development container.
+Tablet API integration is implemented; see **`tablet/README.md`** for server
+login, first-admin setup, HTTPS certificate trust and Pi-specific APK builds.
+The physical attendance-terminal integration remains a separate next step.
 
 ## Start
 
@@ -48,17 +50,18 @@ not an Android APK build, and does not need PostgreSQL or a `.env` file.
 The first launch downloads web dependencies; subsequent starts reuse
 the package cache.
 
-The debug-only `tablet/lib/preview.dart` opens the dashboard with the
-same application theme. Android continues to use `lib/main.dart` and
-requires device authentication.
+The debug-only `tablet/lib/preview.dart` now opens real administrator login.
+Trust the local API certificate and create the first admin as described in
+`tablet/README.md`. Android continues to use `lib/main.dart`, requiring both
+device unlock and server authentication. Set `SHOW_SAMPLE_DATA=true` when
+recreating the preview container to use the separate fictional UI fixtures.
 
 The dashboard contains the greeting, a live gym-local clock (IST), four
 summary cards, and recent check-ins with membership status badges. Only
 the debug preview enables the clearly labelled reference sample data.
-The normal app shows unavailable totals and an attendance-not-connected
-message with the same offline cloud icon as Attendance and Members until the
-backend is integrated; it does not report invented
-member counts or revenue.
+The normal app loads real member counts from the Rust API. Attendance, plans
+and revenue remain unavailable because those backend features are not implemented;
+it does not invent totals or use preview records in an authenticated session.
 
 Pull down at the top of Dashboard's body, Attendance's check-in list, or the
 Members list to refresh, including empty and filtered lists. In the browser
@@ -68,8 +71,9 @@ is used during login and is the app's loading style. Reduced-motion settings
 keep the dumbbell stationary. Refresh retains the selected date, search, filters,
 and temporary member registrations; Attendance's downward swipe still reopens
 its overview. Debug preview refreshes briefly show the animation and rebuild
-local data only. Normal-app refreshes retain the disconnected state and explain
-that live data cannot be fetched until the backend is integrated.
+local data only. Normal-app Dashboard and Members refreshes request server data.
+Attendance refresh checks readiness and explains that attendance endpoints
+are not implemented.
 
 Attendance opens on today's gym-local date, with member numbers,
 check-in times (IST), membership-status badges, search, status filters,
@@ -97,19 +101,20 @@ and an Add member form. Profiles include contact details, joining date, plan dat
 notes, and recent sample attendance. Billing/history remains explicitly unavailable.
 The debug preview has 178 fictional profiles matching the dashboard reference.
 Validated additions are preview-only, remain when changing sidebar sections, and
-disappear on refresh/hot restart. No real records are loaded or saved until the
-backend and staff authorization are connected; registration saving is disabled
-in the normal app. No biometric data, plans, or payments are created by the form.
+disappear on refresh/hot restart. The authenticated app loads and registers real
+records through the Rust API, uses server pagination/search and fetches full
+basic profiles by UUID. No biometric data, plans, or payments are created by the form.
 
 Settings includes administrator management (maximum three, including the initial
 admin), password-change forms, gym/contact details, an API address preference,
 and honest terminal/backup availability indicators. Preview identities and settings
 remain when navigating between sections, but reset on restart. Password forms
 validate only and discard their input; they never store credentials, verify a
-current password, create a usable login, or change the tablet PIN. Normal-app
-mutations are disabled until staff authentication and backend integration exist.
-The server must enforce authorization, unique identities, and the three-admin
-limit transactionally; the preview/UI limit is not a security boundary.
+current password, create a usable login, or change the tablet PIN.
+The authenticated app saves gym settings, creates usable administrators and
+changes passwords through the API. Password changes revoke all own sessions.
+The server enforces authorization, unique identities and the three-admin limit
+transactionally; the preview/UI limit is not a security boundary.
 The Settings title stays fixed while its body scrolls beneath it,
 matching the Attendance page header.
 

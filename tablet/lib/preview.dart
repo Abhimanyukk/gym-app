@@ -8,5 +8,10 @@ void main() {
   if (!kDebugMode || !kIsWeb) {
     throw UnsupportedError('UI preview is only available in debug web runs.');
   }
-  runApp(const GymManagementApp(home: DashboardScreen(showSampleData: true)));
+  const sample = bool.fromEnvironment('SHOW_SAMPLE_DATA');
+  runApp(
+    const GymManagementApp(
+      home: sample ? DashboardScreen(showSampleData: true) : null,
+    ),
+  );
 }
