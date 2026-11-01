@@ -1,6 +1,6 @@
 ---
 name: gym-management-app
-description: "Build, extend, debug, and review the single-location gym management system using Flutter on an Android tablet, FastAPI on Raspberry Pi 5, PostgreSQL, and an eSSL AiFace-Mars attendance terminal. Use for architecture, implementation, database, UI, API, device integration, testing, security, and deployment tasks."
+description: "Build, extend, debug, and review the single-location gym management system using Flutter on an Android tablet, Rust/Axum on Raspberry Pi 5, PostgreSQL, and an eSSL AiFace-Mars attendance terminal. Use for architecture, implementation, database, UI, API, device integration, testing, security, and deployment tasks."
 ---
 
 # Gym Management App Skill
@@ -24,10 +24,11 @@ Use these choices unless the user explicitly approves a change:
 - Native Android integration: Kotlin only when a required Android API
   or SDK cannot be accessed adequately from Flutter. Use
   MethodChannel/EventChannel or Pigeon.
-- Backend: Python and FastAPI.
+- Backend: Rust and Axum (user-approved replacement of Python/FastAPI).
 - Database: PostgreSQL.
-- ORM/migrations: SQLAlchemy 2.x and Alembic.
-- Deployment: Raspberry Pi OS 64-bit; Docker Compose where practical.
+- Database access/migrations: SQLx, parameterized SQL, embedded explicit SQL migrations.
+- Deployment: Raspberry Pi OS 64-bit; native executable and systemd in production.
+  Docker is for local development/building/testing only.
 - Attendance terminal: eSSL AiFace-Mars communicating over the local
   network using its configured ADMS/PUSH protocol.
 - Tablet-to-server communication: authenticated REST API over the gym
@@ -47,7 +48,7 @@ Keep three components separate:
 1.  Flutter tablet app: UI, navigation, form validation, and REST API
     client. It must not connect directly to PostgreSQL or implement the
     eSSL ADMS listener.
-2.  FastAPI on Raspberry Pi: authentication, authorization, business
+2.  Rust/Axum on Raspberry Pi: authentication, authorization, business
     rules, REST endpoints, terminal event receiver, and transaction
     handling.
 3.  PostgreSQL: persistent storage. Do not expose it directly to the
@@ -55,11 +56,11 @@ Keep three components separate:
 
 Attendance flow:
 
-`eSSL AiFace-Mars -> LAN/ADMS PUSH -> FastAPI receiver -> event validation/member mapping -> PostgreSQL`
+`eSSL AiFace-Mars -> LAN/ADMS PUSH -> Rust receiver -> event validation/member mapping -> PostgreSQL`
 
 Application flow:
 
-`Flutter tablet -> authenticated REST API -> FastAPI -> PostgreSQL`
+`Flutter tablet -> authenticated REST API -> Rust/Axum -> PostgreSQL`
 
 The terminal sends events to the Raspberry Pi. Do not make the tablet
 act as the terminal server.
@@ -179,7 +180,7 @@ audit-tracked corrections.
 ## API conventions
 
 Use versioned resource-oriented REST endpoints. Keep business logic in
-service/domain modules, not route handlers. Use Pydantic schemas,
+service/domain modules, not route handlers. Use Serde input/output types,
 server-side validation, pagination, and consistent error responses.
 
 Candidate endpoints (do not create all of them without a feature
@@ -231,10 +232,9 @@ existing contracts without explaining the migration.
 
 ## Backend guidelines
 
-- Use Python type hints and clear module boundaries.
-- Use SQLAlchemy 2.x and Alembic migrations.
-- Use dependency injection for database sessions and authenticated
-  users.
+- Use Rust types and clear module boundaries.
+- Use SQLx with bound query parameters and embedded explicit SQL migrations.
+- Use Axum state/extractors for database access and authenticated users.
 - Use transactions for multi-step operations such as invoice/payment
   creation.
 - Enforce important invariants in both application logic and database
@@ -290,15 +290,17 @@ flutter build apk --release
 Typical backend checks may include:
 
 ```bash
-python -m pytest
-alembic upgrade head
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+replab-server --env-file /etc/replab/owner.env migrate
 ```
 
 Inspect the repository and use its actual scripts/dependency manager; do
 not assume these commands or paths exist.
 
 Target deployment: Raspberry Pi 5 (8 GB), Raspberry Pi OS 64-bit,
-FastAPI, PostgreSQL, external HDD for backups, and an Android tablet
+Rust/Axum, PostgreSQL, external HDD for backups, and an Android tablet
 connected over the gym LAN.
 
 Keep development, test, and production configuration separate. Never
@@ -323,7 +325,7 @@ When implementing:
 1.  Make the smallest coherent change.
 2.  Separate UI, API, domain logic, persistence, and device protocol
     concerns.
-3.  Add Alembic migrations for schema changes.
+3.  Add explicit SQL migrations for schema changes.
 4.  Add tests for business rules, validation, failure paths, retries,
     and duplicate handling.
 5.  Update documentation and example configuration.

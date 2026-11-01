@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>RepLab API reference</title><style>
+body{font:16px system-ui;margin:40px auto;max-width:880px;padding:0 24px;background:#140101;color:#eee}
+code,pre{background:#292020;padding:4px;border-radius:4px}td,th{text-align:left;padding:10px;border-bottom:1px solid #493939}
+a{color:#a4dcab}table{width:100%}
+</style></head><body><h1>RepLab Rust API</h1>
+<p>Native server, PostgreSQL, API version <code>/api/v1</code>. This is a static reference, not Swagger.</p>
+<p>All API routes except login require <code>Authorization: Bearer &lt;access_token&gt;</code>.</p>
+<table><tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+<tr><td>GET</td><td>/health/live, /health/ready</td><td>Process/database health</td></tr>
+<tr><td>POST</td><td>/api/v1/auth/login</td><td>Email/password login</td></tr>
+<tr><td>GET</td><td>/api/v1/auth/me</td><td>Current administrator</td></tr>
+<tr><td>POST</td><td>/api/v1/auth/logout</td><td>Revoke current session</td></tr>
+<tr><td>POST</td><td>/api/v1/auth/change-password</td><td>Verify current password; revoke all own sessions</td></tr>
+<tr><td>GET, POST</td><td>/api/v1/admins</td><td>List/create administrators (maximum 3)</td></tr>
+<tr><td>GET, PUT</td><td>/api/v1/settings</td><td>Read/replace gym settings</td></tr>
+<tr><td>GET, POST</td><td>/api/v1/members</td><td>Directory/registration</td></tr>
+<tr><td>GET</td><td>/api/v1/members/{uuid}</td><td>Basic profile</td></tr>
+<tr><td>GET</td><td>/api/v1/dashboard/summary</td><td>Real registered-member counts</td></tr></table>
+<h2>Request bodies</h2>
+<pre>Login: {"email":"admin@example.com","password":"your password"}
+Add admin: {"name":"Admin Name","email":"admin@example.com","password":"15+ characters"}
+Password change: {"current_password":"...","new_password":"15+ characters"}
+Settings: {"gym_name":"Gym Name","phone":"","address":""}
+Member: {"name":"Member Name","phone":"+91 9876543210"}</pre>
+<p>Optional member fields: <code>email, address, emergency_phone, notes, joined, is_active</code>.
+Joining date defaults to today's IST date and cannot be in the future.</p>
+<p>Directory query parameters: <code>q</code> (name/phone/exact member number),
+<code>active</code> (record status), <code>limit</code> (1–100, default 50), <code>offset</code> (nonnegative).
+Responses include <code>items, total, limit, offset</code>.</p>
+<p>Login returns <code>access_token, token_type, expires_at, admin</code>. Sessions last eight hours.
+There are no default credentials. The server executable's <code>create-admin</code> command initializes the first account.</p>
+<p>Error format: <code>{"error":{"code":"...","message":"..."}}</code>. Request IDs are in
+<code>X-Request-ID</code>. Login rate-limit responses include <code>Retry-After</code>.</p>
+<p>Attendance, subscriptions, billing and terminal integration are not available yet.
+Unavailable dashboard totals are <code>null</code>, not invented zeros. An active member record does not establish entry rights.</p>
+</body></html>

@@ -1,0 +1,58 @@
+# Windows development only. Deploy the Pi natively; see README.md.
+# Retains old project/data paths so no development DB is replaced.
+name: replab-server
+x-database: &database
+  POSTGRES_HOST: db
+  POSTGRES_DB: replab
+  POSTGRES_USER: replab_app
+  POSTGRES_PASSWORD: ${APP_DB_PASSWORD:?Keep the existing development .env}
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: replab
+      POSTGRES_USER: replab_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Keep the existing development .env}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Keep the existing development .env}
+    volumes:
+      - ${DATA_DIR:-./data}/postgres:/var/lib/postgresql/data
+      - ./docker/init-runtime.sh:/docker-entrypoint-initdb.d/01-runtime.sh:ro
+    command: ["postgres","-c","shared_buffers=128MB","-c","max_connections=30"]
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: &logging
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+  api:
+    image: replab-api:rust
+    build: {context: ., target: runtime}
+    restart: unless-stopped
+    environment:
+      <<: *database
+      API_BIND_IP: 0.0.0.0
+      API_PORT: 8443
+      ALLOWED_HOSTS: localhost,127.0.0.1
+      CORS_ORIGINS: http://localhost:8080
+      TLS_CERT_PATH: /certs/server.crt
+      TLS_KEY_PATH: /certs/server.key
+    ports: ["127.0.0.1:8001:8443"]
+    volumes: ["./certs:/certs:ro"]
+    depends_on: {db: {condition: service_healthy}}
+    read_only: true
+    tmpfs: ["/tmp:size=16m"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    logging: *logging
+  migrate:
+    image: replab-api:rust
+    profiles: ["tools"]
+    command: ["migrate"]
+    environment:
+      <<: *database
+      POSTGRES_USER: replab_owner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Keep the existing development .env}
+    depends_on: {db: {condition: service_healthy}}

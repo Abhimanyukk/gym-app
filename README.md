@@ -1,8 +1,19 @@
 # Gym Management App
 
-Flutter tablet app and FastAPI backend development environment. The
+Flutter tablet app and Rust backend development environment. The
 Flutter app lives in `tablet/`; PostgreSQL runs as a separate Compose
 service on the private Compose network.
+
+## Raspberry Pi backend
+
+The deployable server now lives separately in **`backend/`**. It includes
+Rust/Axum, PostgreSQL, embedded SQL migrations, admin authentication, the enforced
+three-admin limit, gym settings, and basic member registration/list/detail APIs.
+See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testing,
+HTTPS, native systemd services, backups/restore checks, and the later SSD move.
+Production requires the compiled Linux ARM64 executable, not Rust/Python source
+or Docker. Do not deploy this workspace's Flutter development container. Tablet API integration
+and the physical attendance-terminal integration are separate next steps.
 
 ## Start
 
@@ -13,7 +24,8 @@ docker compose up -d --build
 ```
 
 In VS Code, use **Dev Containers: Reopen in Container** to work inside
-the Flutter/Python development environment.
+the Flutter/Rust development environment. Python is used only by the existing
+Flutter-preview watcher, not by the backend.
 
 ## Flutter
 

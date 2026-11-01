@@ -1,0 +1,9 @@
+.env
+data/
+certs/
+backups/
+.pytest_cache/
+target/
+build/
+*.env
+*.log

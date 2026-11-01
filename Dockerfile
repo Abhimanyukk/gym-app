@@ -1,3 +1,4 @@
+FROM rust:bookworm@sha256:9181b56c2a21ab1d5e73cffe04fc762426d30aa7fac3c91141dd033f49a7fc8b AS rust-tools
 FROM cirrusci/flutter:stable@sha256:32e7d16c7e1458d3135e945ceec82c5d43bfda289526f850711f3908fb927502
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -12,8 +13,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-17-jdk \
     postgresql-client \
     python3 \
-    python3-pip \
-    python3-venv \
     unzip \
     xz-utils \
     zip \
@@ -26,16 +25,11 @@ RUN curl -fsSLo /tmp/flutter.tar.xz \
     && git config --system --add safe.directory /opt/flutter \
     && rm /tmp/flutter.tar.xz
 
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="/opt/flutter/bin:/opt/venv/bin:${PATH}"
-
-RUN python3 -m venv "$VIRTUAL_ENV"
+COPY --from=rust-tools /usr/local/rustup /usr/local/rustup
+COPY --from=rust-tools /usr/local/cargo /usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo
+ENV PATH="/opt/flutter/bin:/usr/local/cargo/bin:${PATH}"
 
 WORKDIR /workspace
-
-COPY requirements-dev.txt /tmp/requirements-dev.txt
-RUN python -m pip install --no-cache-dir --upgrade pip \
-    && python -m pip install --no-cache-dir -r /tmp/requirements-dev.txt \
-    && rm /tmp/requirements-dev.txt
 
 CMD ["bash"]

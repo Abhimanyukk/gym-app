@@ -1,0 +1,30 @@
+name: replab-backend-test
+services:
+  db:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: replab_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: test-superuser-not-for-deployment
+      OWNER_DB_PASSWORD: test-owner-not-for-deployment
+      APP_DB_PASSWORD: test-app-not-for-deployment
+    tmpfs: ["/var/lib/postgresql/data"]
+    volumes:
+      - ./docker/init-test.sh:/docker-entrypoint-initdb.d/01-runtime.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -h 127.0.0.1 -U postgres -d replab_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  tests:
+    image: replab-rust-tools:local
+    build: {context: ., target: tools}
+    command: ["cargo","test","--locked","--","--nocapture"]
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_DB: replab_test
+      POSTGRES_USER: replab_app
+      POSTGRES_PASSWORD: test-app-not-for-deployment
+      TEST_OWNER_PASSWORD: test-owner-not-for-deployment
+      TEST_ADMIN_PASSWORD: test-superuser-not-for-deployment
+    depends_on: {db: {condition: service_healthy}}

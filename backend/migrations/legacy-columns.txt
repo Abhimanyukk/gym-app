@@ -1,0 +1,35 @@
+admins:id:uuid:NO
+admins:slot:smallint:NO
+admins:name:character varying:NO
+admins:email:character varying:NO
+admins:password_hash:text:NO
+admins:created_at:timestamp with time zone:NO
+audit_logs:id:uuid:NO
+audit_logs:actor_id:uuid:YES
+audit_logs:action:character varying:NO
+audit_logs:target_id:uuid:YES
+audit_logs:details:jsonb:NO
+audit_logs:created_at:timestamp with time zone:NO
+gym_settings:id:smallint:NO
+gym_settings:gym_name:character varying:NO
+gym_settings:phone:character varying:NO
+gym_settings:address:character varying:NO
+gym_settings:updated_at:timestamp with time zone:NO
+login_buckets:key:character varying:NO
+login_buckets:attempts:integer:NO
+login_buckets:started_at:timestamp with time zone:NO
+login_sessions:token_hash:character varying:NO
+login_sessions:admin_id:uuid:NO
+login_sessions:expires_at:timestamp with time zone:NO
+members:id:uuid:NO
+members:serial:integer:NO
+members:name:character varying:NO
+members:phone:character varying:NO
+members:email:character varying:NO
+members:address:character varying:NO
+members:emergency_phone:character varying:NO
+members:notes:character varying:NO
+members:joined:date:NO
+members:is_active:boolean:NO
+members:created_at:timestamp with time zone:NO
+members:updated_at:timestamp with time zone:NO
