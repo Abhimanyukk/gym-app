@@ -197,7 +197,7 @@ void main() {
     const sections = [
       ('Attendance', 'See who checked in and when.'),
       ('Members', 'Waiting for member connection'),
-      ('Settings', 'App settings will appear here.'),
+      ('Settings', 'Manage administrators and gym preferences.'),
       ('Dashboard', 'Welcome to RepLab Fitness'),
     ];
     var previousMessage = 'Welcome to RepLab Fitness';
@@ -558,7 +558,10 @@ void main() {
         await tester.pumpAndSettle();
         await tester.pump(const Duration(seconds: 2));
         expect(find.byKey(const ValueKey('dashboard-overview')), findsNothing);
-        expect(find.text('App settings will appear here.'), findsOneWidget);
+        expect(
+          find.text('Manage administrators and gym preferences.'),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       }

@@ -7,6 +7,8 @@ import 'attendance_page.dart';
 import 'dashboard_overview.dart';
 import 'member_profile.dart';
 import 'members_page.dart';
+import 'settings_page.dart';
+import 'settings_preview.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key, this.showSampleData = false});
@@ -23,11 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     (title: 'Dashboard', icon: 'assets/icons/dashboard.svg', message: ''),
     (title: 'Attendance', icon: 'assets/icons/attendance.svg', message: ''),
     (title: 'Members', icon: 'assets/icons/members.svg', message: ''),
-    (
-      title: 'Settings',
-      icon: 'assets/icons/settings.svg',
-      message: 'App settings will appear here.',
-    ),
+    (title: 'Settings', icon: 'assets/icons/settings.svg', message: ''),
   ];
 
   int _selectedIndex = 0;
@@ -36,6 +34,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late final _members = kDebugMode && widget.showSampleData
       ? sampleMembers()
       : <MemberProfile>[];
+  late final _settings = SettingsPreview(
+    enabled: kDebugMode && widget.showSampleData,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -170,51 +171,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 key: const ValueKey('section-body'),
                 child: SafeArea(
                   left: false,
-                  child: _selectedIndex == 1 || _selectedIndex == 2
+                  child: _selectedIndex != 0
                       ? Padding(
                           padding: const EdgeInsets.all(32),
-                          child: _selectedIndex == 1
-                              ? AttendancePage(
-                                  showSampleData:
-                                      kDebugMode && widget.showSampleData,
-                                )
-                              : MembersPage(
-                                  members: _members,
-                                  showSampleData:
-                                      kDebugMode && widget.showSampleData,
-                                ),
+                          child: switch (_selectedIndex) {
+                            1 => AttendancePage(
+                              showSampleData:
+                                  kDebugMode && widget.showSampleData,
+                            ),
+                            2 => MembersPage(
+                              members: _members,
+                              showSampleData:
+                                  kDebugMode && widget.showSampleData,
+                            ),
+                            _ => SettingsPage(preview: _settings),
+                          },
                         )
                       : SingleChildScrollView(
                           key: PageStorageKey(section.title),
                           padding: const EdgeInsets.all(32),
-                          child: switch (_selectedIndex) {
-                            0 => DashboardOverview(
-                              showSampleData:
-                                  kDebugMode && widget.showSampleData,
-                            ),
-                            _ => Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  section.title,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineMedium,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  section.message,
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
-                                const SizedBox(height: 24),
-                                // dover-gain-efficient: these are UI placeholders, not staff-authorized backend screens.
-                                Text(
-                                  'Staff authorization is not connected yet.',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          },
+                          child: DashboardOverview(
+                            showSampleData: kDebugMode && widget.showSampleData,
+                          ),
                         ),
                 ),
               ),

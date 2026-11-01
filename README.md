@@ -77,6 +77,18 @@ disappear on refresh/hot restart. No real records are loaded or saved until the
 backend and staff authorization are connected; registration saving is disabled
 in the normal app. No biometric data, plans, or payments are created by the form.
 
+Settings includes administrator management (maximum three, including the initial
+admin), password-change forms, gym/contact details, an API address preference,
+and honest terminal/backup availability indicators. Preview identities and settings
+remain when navigating between sections, but reset on restart. Password forms
+validate only and discard their input; they never store credentials, verify a
+current password, create a usable login, or change the tablet PIN. Normal-app
+mutations are disabled until staff authentication and backend integration exist.
+The server must enforce authorization, unique identities, and the three-admin
+limit transactionally; the preview/UI limit is not a security boundary.
+The Settings title and subtitle stay fixed while its cards scroll beneath them,
+matching the Attendance page header.
+
 The left sidebar is fixed and does not scroll; only the page body scrolls.
 Short displays use compact 48px icon buttons so every destination stays
 reachable without scrolling the navigation.
