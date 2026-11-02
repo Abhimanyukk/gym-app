@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'api_transport.dart';
 import 'device_session.dart';
 import 'member_profile.dart';
+import 'member_enrollment.dart';
 
 typedef AdminAccount = ({String id, String name, String email});
 typedef MemberDirectory = ({List<MemberProfile> items, int total});
@@ -66,7 +67,7 @@ class RepLabApi extends ChangeNotifier {
     clearSession();
     _base = Uri.parse(url.trim()).replace(path: '');
     final health = await request('GET', '/health/ready', authenticated: false);
-    if (health is! Map || health['schema'] != '2') {
+    if (health is! Map || !['2', '3'].contains(health['schema'])) {
       throw const ApiException(
         'Update the gym server to RepLab 0.3 and run its migration before setting up this app.',
         code: 'server_update_required',
@@ -283,6 +284,33 @@ class RepLabApi extends ChangeNotifier {
   Future<MemberProfile> addMember(Map<String, dynamic> fields) async =>
       MemberProfile.fromJson(
         await request('POST', '/api/v1/members', body: fields)
+            as Map<String, dynamic>,
+      );
+  Future<EnrollmentOptions> enrollmentOptions() async {
+    try {
+      return EnrollmentOptions.fromJson(
+        await request('GET', '/api/v1/enrollment-options')
+            as Map<String, dynamic>,
+      );
+    } on ApiException catch (error) {
+      if (error.code == 'not_found') {
+        throw const ApiException(
+          'Update the gym server to RepLab 0.4 and run its migration to register photos, plans and payments.',
+          code: 'server_update_required',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<MemberProfile> enrollMember(Map<String, dynamic> fields) async =>
+      MemberProfile.fromJson(
+        await request('POST', '/api/v1/members/enroll', body: fields)
+            as Map<String, dynamic>,
+      );
+  Future<MemberProfile> findEnrollment(String requestId) async =>
+      MemberProfile.fromJson(
+        await request('GET', '/api/v1/enrollments/$requestId')
             as Map<String, dynamic>,
       );
   Future<List<AdminAccount>> admins() async =>

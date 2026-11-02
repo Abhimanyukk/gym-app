@@ -25,16 +25,23 @@ libraries; build against an OS compatible with the Pi, not Windows.
   Legacy account metadata is preserved but is not used for login.
 - Persistent login limits: 10/server and 30/source IP per 15 minutes. Forwarded
   IP headers are ignored. Do not add an unconfigured reverse proxy.
-- Gym settings; member registration, directory/search/pagination, basic profiles.
+- Gym settings; member registration, directory/search/pagination, full profiles.
+- Four-step tablet enrollment: required contact/address/emergency details,
+  profile photo, Silver/Gold subscription and independently timed add-ons,
+  full Cash/UPI payment recorded by explicit staff confirmation.
+- Server-calculated integer-paise totals, append-only numbered registration
+  receipts and idempotent retries/lookup for uncertain responses.
 - Atomic mutation + audit + commit **before** success response; restricted DB
   runtime role; credentials/inputs/SQL not included in request logs.
-- HTTPS, 16-KiB JSON body limit, 32 concurrent requests, request IDs, health checks.
+- HTTPS, 16-KiB JSON body limit (3 MiB for photo enrollment only),
+  32 concurrent requests, request IDs, health checks.
 - Explicit non-destructive migrations and native backup/restore-check scripts.
 
 Flutter API integration is implemented in `../tablet/`; see its README for
 login, certificate trust and Android builds.
 Not implemented: attendance/terminal ingestion, member
-editing/deactivation, staff roles, subscriptions, payments, invoices, expenses,
+editing/deactivation, staff roles, subscription renewal/freeze/cancellation,
+partial payments/refunds, tax invoices, payment-provider verification, expenses,
 reports, automatic backup scheduling, or forgotten-password recovery.
 Unsupported dashboard totals are null, not fake zeroes. An active member record
 does not imply a valid subscription or entry rights.
@@ -46,39 +53,39 @@ in the executable and app. `API_PORT` entries in old configurations are ignored.
 Only the bind address, allowed hosts/origins, certificate paths and database
 connection settings remain configurable.
 
-## Upgrade an existing v0.2 Pi without resetting data
+## Upgrade an existing v0.2/v0.3 Pi to v0.4 without resetting data
 
-Use `build/replab-linux-arm64-v0.3.0.tar.gz` and its SHA-256 sidecar. Transfer both
+Use `build/replab-linux-arm64-v0.4.0.tar.gz` and its SHA-256 sidecar. Transfer both
 to the Pi, compare their hashes, and extract into a **new** release directory.
 Do not rerun `configure`, `init-db`, `create-admin` or `create-cert.sh`.
 Keep the existing accounts, database, secrets, certificate and systemd unit.
 
 ```powershell
-scp backend/build/replab-linux-arm64-v0.3.0.tar.gz backend/build/replab-linux-arm64-v0.3.0.tar.gz.sha256 pi@192.168.31.239:~/
+scp backend/build/replab-linux-arm64-v0.4.0.tar.gz backend/build/replab-linux-arm64-v0.4.0.tar.gz.sha256 pi@192.168.31.239:~/
 ```
 
 On the Pi:
 
 ```sh
 cd ~
-sha256sum replab-linux-arm64-v0.3.0.tar.gz
-cat replab-linux-arm64-v0.3.0.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.4.0.tar.gz
+cat replab-linux-arm64-v0.4.0.tar.gz.sha256
 # Proceed only if the digests match.
-mkdir ~/replab-release-v0.3.0
-tar -xzf replab-linux-arm64-v0.3.0.tar.gz -C ~/replab-release-v0.3.0
-cd ~/replab-release-v0.3.0
+mkdir ~/replab-release-v0.4.0
+tar -xzf replab-linux-arm64-v0.4.0.tar.gz -C ~/replab-release-v0.4.0
+cd ~/replab-release-v0.4.0
 ./replab-server --version
 ldd ./replab-server
-sudo sh /opt/replab/tools/backup.sh "/var/backups/replab/pre-v0.3-$(date +%Y%m%d-%H%M%S).dump" --verify
+sudo sh /opt/replab/tools/backup.sh "/var/backups/replab/pre-v0.4-$(date +%Y%m%d-%H%M%S).dump" --verify
 # Keep the old binary; stop if this backup path already exists.
-sudo test ! -e /opt/replab/replab-server-v0.2.0
+sudo test ! -e /opt/replab/replab-server-pre-v0.4
 ```
 
 If all checks succeed:
 
 ```sh
 sudo systemctl stop replab
-sudo cp -a /opt/replab/replab-server /opt/replab/replab-server-v0.2.0
+sudo cp -an /opt/replab/replab-server /opt/replab/replab-server-pre-v0.4
 sudo install -o root -g root -m 755 ./replab-server /opt/replab/replab-server
 sudo cp -r tools /opt/replab/
 sudo /opt/replab/replab-server --env-file /etc/replab/owner.env migrate
@@ -87,11 +94,15 @@ sudo systemctl start replab
 sudo curl --cacert /etc/replab/server.crt https://192.168.31.239:8443/health/ready
 ```
 
-Readiness must contain `"schema":"2"`. Migration preserves the sole existing
+Readiness must contain `"schema":"3"`. Migration preserves the sole existing
 administrator's ID, name, email and password hash, as well as all business data.
 If more than one administrator exists, migration refuses atomically without
 deleting anyone: stop and choose the account deliberately before proceeding.
-The updated tablet requires this migration before first setup.
+The updated tablet requires this migration before using the registration wizard.
+Schema 3 adds the `member_enrollments` table without fabricating subscriptions
+or payments for old member records. Do not start the old executable against
+schema 3 as a rollback; preserve the backup and use a deliberate restore into
+a new database if necessary.
 Old APK login bodies containing `email` remain accepted, but account selection
 is now password-only. Existing keys retain their expiry until successfully resumed.
 
@@ -132,7 +143,7 @@ rules in `pg_hba.conf`; do not add LAN-wide `trust` rules or expose port 5432.
 
 ## 2. Obtain the executable-only deployment package
 
-After a build here, `build/replab-linux-arm64-v0.3.0.tar.gz` contains:
+After a build here, `build/replab-linux-arm64-v0.4.0.tar.gz` contains:
 
 - `replab-server`
 - `deploy/replab.service`
@@ -145,7 +156,7 @@ files, or sample member records** in the package. A SHA-256 sidecar is supplied.
 From Windows PowerShell in `backend/`, replace the SSH user/IP:
 
 ```powershell
-scp build/replab-linux-arm64-v0.3.0.tar.gz build/replab-linux-arm64-v0.3.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_IP:~/
+scp build/replab-linux-arm64-v0.4.0.tar.gz build/replab-linux-arm64-v0.4.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_IP:~/
 ```
 
 On the Pi:
@@ -153,10 +164,10 @@ On the Pi:
 ```sh
 cd ~
 # The sidecar's recorded path may include build/; compare the digest explicitly:
-sha256sum replab-linux-arm64-v0.3.0.tar.gz
-cat replab-linux-arm64-v0.3.0.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.4.0.tar.gz
+cat replab-linux-arm64-v0.4.0.tar.gz.sha256
 mkdir -p ~/replab-release
-tar -xzf replab-linux-arm64-v0.3.0.tar.gz -C ~/replab-release
+tar -xzf replab-linux-arm64-v0.4.0.tar.gz -C ~/replab-release
 cd ~/replab-release
 ./replab-server --version
 ldd ./replab-server
@@ -170,7 +181,7 @@ and the committed lockfile:
 
 ```sh
 cargo build --locked --release
-sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.3.0.tar.gz
+sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.4.0.tar.gz
 ```
 
 Compilers/source may be on a build machine; they are not production prerequisites.
@@ -226,7 +237,7 @@ Use `sudo` for this check: `/etc/replab` is restricted to root and the `replab`
 group, so an ordinary login user cannot read the certificate through it.
 Keep the directory, private key, and environment-file permissions unchanged.
 
-Expected readiness: `{"status":"ready","database":"ok","schema":"2"}`.
+Expected readiness: `{"status":"ready","database":"ok","schema":"3"}`.
 The service starts after boot, restarts failures, runs as non-root `replab`,
 and has a read-only application filesystem and 512-MiB memory cap.
 Migrations are manual operator actions, never automatic API startup resets.
@@ -257,8 +268,11 @@ All `/api/v1` routes except login require `Authorization: Bearer <access_token>`
 | POST | `/api/v1/auth/change-password` | Verify current password, revoke all own sessions |
 | GET, POST | `/api/v1/admins` | Legacy account API; second-admin creation refused |
 | GET, PUT | `/api/v1/settings` | Read/replace gym preferences |
-| GET, POST | `/api/v1/members` | Searchable directory/registration |
-| GET | `/api/v1/members/{uuid}` | Basic member profile |
+| GET, POST | `/api/v1/members` | Searchable directory/legacy basic registration |
+| GET | `/api/v1/enrollment-options` | Plans, integer-paise prices, add-ons, UPI payee |
+| POST | `/api/v1/members/enroll` | Atomic member/photo/subscription/full-payment registration |
+| GET | `/api/v1/enrollments/{request_id}` | Recover a saved registration after a lost response |
+| GET | `/api/v1/members/{uuid}` | Full profile, including registered photo/receipt |
 | GET | `/api/v1/dashboard/summary` | Real member counts, unavailable totals null |
 
 Login body: `{"password":"<password>"}`.
@@ -268,10 +282,70 @@ Resume has no body; send the saved key in the Authorization header. It returns
 hashes. Logout revokes the current key; password change revokes every key.
 Don't put credentials/tokens into URLs, command arguments, logs or shell history.
 
-Registration body: `{"name":"Test Member","phone":"+91 9876543210"}`.
+Legacy basic registration body: `{"name":"Test Member","phone":"+91 9876543210"}`.
 Optional fields: `email`, `address`, `emergency_phone`, `notes`, `joined`,
 `is_active`. Joining date defaults to today's IST date and cannot be future.
 This does not create subscriptions, payments or biometric data.
+
+### Complete enrollment (v0.4)
+
+Read the authenticated catalogue from `/api/v1/enrollment-options` before
+collecting payment. It supplies Silver prices ₹1,200/₹3,200/₹6,000/₹12,000
+and Gold ₹1,700/₹4,700/₹9,000/₹18,000 for 1/3/6/12 calendar months.
+Personal training is ₹5,000/month; insurance ₹200/month.
+UPI payee is `8943521009@yescred`, **RepLab Fitness**.
+
+`POST /api/v1/members/enroll`:
+
+```json
+{
+  "request_id": "00000000-0000-4000-8000-000000000001",
+  "member": {
+    "name": "Test Member",
+    "phone": "+91 9876543210",
+    "address": "Synthetic address",
+    "emergency_phone": "+91 9876543211"
+  },
+  "photo_base64": "<base64 JPEG or PNG profile photo>",
+  "plan_code": "gold",
+  "months": 3,
+  "starts_on": "<today's IST date, YYYY-MM-DD>",
+  "training_months": 1,
+  "insurance_months": 2,
+  "payment_method": "upi",
+  "payment_reference": "optional transaction reference",
+  "payment_confirmed": true
+}
+```
+
+Generate a fresh UUID per registration; reuse its exact payload/ID for retries.
+The server computes ₹10,100 / 1,010,000 paise for this combination. Client totals
+are not accepted. Address/emergency phone, valid photo, selected plan/duration
+and explicit full-payment confirmation are required. Only Cash/UPI are supported.
+Add-on durations are 0 (not included) through the plan duration, independently.
+Start date is today through 366 days ahead and cannot precede the joining date.
+Add-ons share the plan start. End dates are inclusive: clamped calendar-month
+anniversary minus one day, including for month ends/leap years.
+
+Photos are at most 2 MiB decoded, JPEG/PNG only, at most 1024×1024 pixels;
+the endpoint accepts at most 3 MiB JSON. The server strips metadata by resizing
+to at most 512×512 and re-encoding JPEG. This is a consented profile photo, not
+a biometric template; no attendance-terminal enrollment is performed.
+Images stay in PostgreSQL `bytea`, so ordinary verified `pg_dump` backups include
+them. Paginated directory results do not ship every full photo.
+
+The transaction commits member + photo/subscription + receipt + audit together.
+Receipts have unique `RL-000001`-style numbers (gaps are permitted), server UTC
+receipt timestamps and the authenticated confirming administrator. Runtime
+permissions cannot update/delete receipts. UPI is **staff-confirmed**, not
+bank-verified: QR scans never automatically mark payment paid. Insurance add-on
+records do not issue a policy; reporting/refunds are separate future work.
+
+An identical retry returns the same member/receipt; changing an already-used ID
+returns `409 enrollment_conflict`. Lookup returns the full saved member or
+`404 enrollment_not_found`. On timeout, check or retry the same registration
+without collecting payment again. Draft/retry state is retained only in the
+open tablet dialog, not across app restarts; check records after a restart.
 
 Directory: `q` (name/phone/exact M-0001 number), `active` (record status),
 `limit` (1–100, default 50), `offset` (nonnegative). Results contain `items`,
@@ -297,7 +371,7 @@ Verification requires space for a second temporary database.
 
 Copy verified backups **off the Pi** to protected storage. The same microSD
 card is not a backup against card failure. Protect `.env`/certificate material
-separately; dumps include personal data and password hashes.
+separately; dumps include profile photos, financial records, personal data and password hashes.
 Choose scheduling/retention before production (for example seven daily copies);
 this version does not claim a scheduled job or automatic backup UI.
 
@@ -390,6 +464,9 @@ cargo build --locked --release
 Tests cover auth/session expiry/revocation, persisted throttling, concurrent
 admin cap, runtime permissions, pagination/search, settings/member persistence,
 secret-redacted validation, request limits, audit rollback and legacy adoption.
+Enrollment checks cover catalogue/prices, required contact/photo/full-payment
+validation, large-photo body limits, atomic rollback, concurrent duplicate
+submissions, conflicting retries, JPEG normalization and append-only receipts.
 
 Cross-build on Debian Bookworm with Rust's ARM64 target and cross-GCC:
 
@@ -398,7 +475,7 @@ rustup target add aarch64-unknown-linux-gnu
 sudo apt install gcc-aarch64-linux-gnu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
   cargo build --locked --release --target aarch64-unknown-linux-gnu
-sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.3.0.tar.gz
+sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.4.0.tar.gz
 ```
 
 ## Existing Python-era PostgreSQL databases

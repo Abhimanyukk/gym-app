@@ -7,6 +7,7 @@ import 'package:gym_management_app/main.dart';
 import 'package:gym_management_app/replab_api.dart';
 
 import 'api_fixture.dart';
+import 'registration_fixture.dart';
 
 void main() {
   const device = MethodChannel('plugins.flutter.io/local_auth');
@@ -73,6 +74,7 @@ void main() {
         '+1 202 555 0103',
       );
       final save = find.byKey(const ValueKey('member-add-save'));
+      await advanceRegistrationToPayment(tester);
       await tester.tap(save);
       await tester.pump();
       expect(tester.widget<FilledButton>(save).onPressed, isNull);
@@ -81,7 +83,10 @@ void main() {
       expect(find.byKey(const ValueKey('member-add-dialog')), findsOneWidget);
       expect(
         fixture.requests
-            .where((r) => r.method == 'POST' && r.url.path == '/api/v1/members')
+            .where(
+              (r) =>
+                  r.method == 'POST' && r.url.path == '/api/v1/members/enroll',
+            )
             .length,
         1,
       );
@@ -101,6 +106,7 @@ void main() {
         find.byKey(const ValueKey('member-phone')),
         '+1 202 555 0104',
       );
+      await advanceRegistrationToPayment(tester);
       await tester.tap(save);
       await tester.pumpAndSettle();
       expect(
@@ -156,6 +162,7 @@ void main() {
         find.byKey(const ValueKey('member-phone')),
         '+1 202 555 0102',
       );
+      await advanceRegistrationToPayment(tester);
       await tester.tap(find.byKey(const ValueKey('member-add-save')));
       await tester.pumpAndSettle();
       expect(fixture.members.length, 2);

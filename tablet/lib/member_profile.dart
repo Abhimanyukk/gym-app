@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'sample_attendance.dart';
 
 class MemberProfile {
@@ -15,6 +18,8 @@ class MemberProfile {
     this.planEnd,
     this.id,
     this.isActive = true,
+    this.enrollment,
+    this.photo,
   });
 
   final String number;
@@ -30,6 +35,8 @@ class MemberProfile {
   final DateTime? planEnd;
   final String? id;
   final bool isActive;
+  final Map<String, dynamic>? enrollment;
+  final Uint8List? photo;
 
   factory MemberProfile.fromJson(Map<String, dynamic> data) => MemberProfile(
     id: data['id'] as String,
@@ -42,6 +49,17 @@ class MemberProfile {
     emergencyPhone: data['emergency_phone'] as String,
     notes: data['notes'] as String,
     isActive: data['is_active'] as bool,
+    enrollment: data['enrollment'] as Map<String, dynamic>?,
+    photo: data['photo_base64'] == null
+        ? null
+        : base64Decode(data['photo_base64'] as String),
+    plan: (data['enrollment'] as Map?)?['plan_name'] as String?,
+    planStart: (data['enrollment'] as Map?)?['starts_on'] == null
+        ? null
+        : DateTime.parse(data['enrollment']['starts_on'] as String),
+    planEnd: (data['enrollment'] as Map?)?['ends_on'] == null
+        ? null
+        : DateTime.parse(data['enrollment']['ends_on'] as String),
   );
 
   MembershipStatus? get membership {

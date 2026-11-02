@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import 'app_loading.dart';
 import 'member_profile.dart';
+import 'member_registration_dialog.dart';
+import 'member_enrollment.dart';
 import 'sample_attendance.dart';
 import 'replab_api.dart';
 
@@ -104,7 +106,7 @@ class _MembersPageState extends State<MembersPage> {
     final member = await showDialog<MemberProfile>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => _AddMemberDialog(
+      builder: (_) => MemberRegistrationDialog(
         members: widget.members,
         canSave: _isPreview || widget.api != null,
         api: widget.api,
@@ -191,7 +193,7 @@ class _MembersPageState extends State<MembersPage> {
               const SizedBox(height: 8),
               Text(
                 'All registered members, in one place.',
-                style: theme.textTheme.bodyLarge?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -613,7 +615,8 @@ class _MemberAvatar extends StatelessWidget {
     radius: 20,
     backgroundColor: const Color(0xFFE4F0ED),
     foregroundColor: Theme.of(context).colorScheme.primary,
-    child: Text(member.initials),
+    backgroundImage: member.photo == null ? null : MemoryImage(member.photo!),
+    child: member.photo == null ? Text(member.initials) : null,
   );
 }
 
@@ -777,7 +780,11 @@ class _MemberDetails extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      preview ? 'Preview profile · Not a server record.' : 'Saved server record · Record status does not imply a valid subscription.',
+                      preview
+                          ? 'Preview profile · Not a server record.'
+                          : member.enrollment == null
+                          ? 'Saved server record · No subscription or payment registered.'
+                          : 'Saved server record · Payment was confirmed by staff.',
                       style: theme.textTheme.bodySmall,
                     ),
                     const SizedBox(height: 24),
@@ -799,14 +806,18 @@ class _MemberDetails extends StatelessWidget {
                       fields: [
                         (
                           'Plan',
-                          !preview
-                              ? 'Subscriptions are not implemented'
+                          !preview && member.enrollment == null
+                              ? 'No plan registered'
                               : member.plan ?? 'No plan assigned',
                         ),
                         (
                           'Status',
-                          !preview
+                          !preview && member.enrollment == null
                               ? 'Unavailable'
+                              : member.planStart != null &&
+                                    DateUtils.dateOnly(member.planStart!)
+                                        .isAfter(DateUtils.dateOnly(now))
+                              ? 'Not started'
                               : member.membership?.label ?? 'No plan',
                         ),
                         ('Starts on', date(member.planStart)),
@@ -846,14 +857,55 @@ class _MemberDetails extends StatelessWidget {
                     const SizedBox(height: 20),
                     _DetailsSection(
                       title: 'Payments & subscription history',
-                      fields: [
-                        (
-                          'Records unavailable',
-                          preview
-                              ? 'Billing and subscription history will appear once the backend is connected. No payments are recorded in this preview.'
-                              : 'Billing and subscriptions are not implemented on the server.',
-                        ),
-                      ],
+                      fields: member.enrollment != null
+                          ? [
+                              (
+                                'Receipt',
+                                member.enrollment!['invoice_number'] as String,
+                              ),
+                              (
+                                'Plan duration',
+                                '${member.enrollment!['months']} months',
+                              ),
+                              (
+                                'Personal training',
+                                '${member.enrollment!['training_months']} months',
+                              ),
+                              (
+                                'Insurance',
+                                '${member.enrollment!['insurance_months']} months',
+                              ),
+                              (
+                                'Full payment',
+                                rupees(
+                                  member.enrollment!['total_paise'] as int,
+                                ),
+                              ),
+                              (
+                                'Payment method',
+                                (member.enrollment!['payment_method'] as String)
+                                    .toUpperCase(),
+                              ),
+                              (
+                                'UPI reference',
+                                member.enrollment!['payment_reference']
+                                    as String,
+                              ),
+                              (
+                                'Confirmation',
+                                preview
+                                    ? 'Simulated only · No money collected'
+                                    : 'Staff confirmed · Not bank-verified automatically',
+                              ),
+                            ]
+                          : [
+                              (
+                                'Records unavailable',
+                                preview
+                                    ? 'Billing and subscription history will appear once the backend is connected. No payments are recorded in this preview.'
+                                    : 'No subscription or payment registered for this member.',
+                              ),
+                            ],
                     ),
                   ],
                 ),
@@ -922,285 +974,6 @@ class _DetailsSection extends StatelessWidget {
             },
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _AddMemberDialog extends StatefulWidget {
-  const _AddMemberDialog({
-    required this.members,
-    required this.canSave,
-    this.api,
-  });
-  final List<MemberProfile> members;
-  final bool canSave;
-  final RepLabApi? api;
-
-  @override
-  State<_AddMemberDialog> createState() => _AddMemberDialogState();
-}
-
-class _AddMemberDialogState extends State<_AddMemberDialog> {
-  final _form = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _phone = TextEditingController();
-  final _email = TextEditingController();
-  final _address = TextEditingController();
-  final _emergency = TextEditingController();
-  final _notes = TextEditingController();
-  DateTime _joined = DateUtils.dateOnly(gymNow());
-  bool _saving = false;
-  bool _uncertain = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    for (final controller in [
-      _name,
-      _phone,
-      _email,
-      _address,
-      _emergency,
-      _notes,
-    ]) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
-
-  String? _phoneError(String? value, {bool required = false}) {
-    final text = (value ?? '').trim();
-    if (text.isEmpty) return required ? 'Enter a phone number' : null;
-    if (!RegExp(r'^\+?[\d ()-]+$').hasMatch(text) ||
-        text.replaceAll(RegExp(r'\D'), '').length < 7 ||
-        text.replaceAll(RegExp(r'\D'), '').length > 15) {
-      return 'Enter a valid phone number (7–15 digits)';
-    }
-    return null;
-  }
-
-  Future<void> _save() async {
-    if (_saving ||
-        _uncertain ||
-        !widget.canSave ||
-        !_form.currentState!.validate()) {
-      return;
-    }
-    if (widget.api != null) {
-      setState(() {
-        _saving = true;
-        _error = null;
-      });
-      try {
-        final saved = await widget.api!.addMember({
-          'name': _name.text.trim(),
-          'phone': _phone.text.trim(),
-          'email': _email.text.trim(),
-          'address': _address.text.trim(),
-          'emergency_phone': _emergency.text.trim(),
-          'notes': _notes.text.trim(),
-          'joined':
-              '${_joined.year.toString().padLeft(4, '0')}-${_joined.month.toString().padLeft(2, '0')}-${_joined.day.toString().padLeft(2, '0')}',
-          'is_active': true,
-        });
-        if (mounted) Navigator.pop(context, saved);
-      } on ApiException catch (error) {
-        if (mounted) {
-          setState(() {
-            _error = error.message;
-            _uncertain = error.uncertain;
-          });
-        }
-      } finally {
-        if (mounted) setState(() => _saving = false);
-      }
-      return;
-    }
-    var index = 1;
-    while (widget.members.any(
-      (member) => member.number == 'M-${index.toString().padLeft(4, '0')}',
-    )) {
-      index++;
-    }
-    Navigator.pop(
-      context,
-      MemberProfile(
-        number: 'M-${index.toString().padLeft(4, '0')}',
-        name: _name.text.trim(),
-        phone: _phone.text.trim(),
-        email: _email.text.trim(),
-        address: _address.text.trim(),
-        emergencyPhone: _emergency.text.trim(),
-        notes: _notes.text.trim(),
-        joined: _joined,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final fields = <Widget>[
-      TextFormField(
-        key: const ValueKey('member-name'),
-        controller: _name,
-        textCapitalization: TextCapitalization.words,
-        maxLength: 100,
-        decoration: const InputDecoration(labelText: 'Full name *'),
-        validator: (value) => (value ?? '').trim().isEmpty
-            ? 'Enter the member’s full name'
-            : null,
-      ),
-      TextFormField(
-        key: const ValueKey('member-phone'),
-        controller: _phone,
-        keyboardType: TextInputType.phone,
-        maxLength: 24,
-        decoration: const InputDecoration(labelText: 'Phone *'),
-        validator: (value) => _phoneError(value, required: true),
-      ),
-      TextFormField(
-        key: const ValueKey('member-email'),
-        controller: _email,
-        keyboardType: TextInputType.emailAddress,
-        maxLength: 254,
-        decoration: const InputDecoration(labelText: 'Email (optional)'),
-        validator: (value) =>
-            (value ?? '').trim().isEmpty ||
-                RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(value!.trim())
-            ? null
-            : 'Enter a valid email address',
-      ),
-      TextFormField(
-        key: const ValueKey('member-emergency'),
-        controller: _emergency,
-        keyboardType: TextInputType.phone,
-        maxLength: 24,
-        decoration: const InputDecoration(
-          labelText: 'Emergency phone (optional)',
-        ),
-        validator: _phoneError,
-      ),
-      TextFormField(
-        key: const ValueKey('member-address'),
-        controller: _address,
-        maxLength: 500,
-        maxLines: 2,
-        decoration: const InputDecoration(labelText: 'Address (optional)'),
-      ),
-      TextFormField(
-        key: const ValueKey('member-notes'),
-        controller: _notes,
-        maxLength: 2000,
-        maxLines: 3,
-        decoration: const InputDecoration(labelText: 'Notes (optional)'),
-      ),
-    ];
-    return PopScope(
-      canPop: !_saving,
-      child: Dialog(
-        key: const ValueKey('member-add-dialog'),
-        insetPadding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text('Add member', style: theme.textTheme.titleLarge),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: SingleChildScrollView(
-                  key: const ValueKey('member-form-scroll'),
-                  padding: const EdgeInsets.all(24),
-                  child: Form(
-                    key: _form,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          widget.api != null
-                              ? 'Register this member in the gym database. No plan, payment or biometric record is created.'
-                              : widget.canSave
-                              ? 'Preview only · Member details are temporary and not saved to the server. Use test data.'
-                              : 'Member registration is not connected yet. Saving requires the backend and staff authorization.',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 20),
-                        if (_error != null) ...[
-                          Text(
-                            _error!,
-                            style: TextStyle(color: theme.colorScheme.error),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        for (final field in fields) ...[
-                          field,
-                          const SizedBox(height: 12),
-                        ],
-                        OutlinedButton.icon(
-                          key: const ValueKey('member-joined'),
-                          onPressed: () async {
-                            final date = await showDatePicker(
-                              context: context,
-                              initialDate: _joined,
-                              firstDate: DateTime(2000),
-                              lastDate: DateUtils.dateOnly(gymNow()),
-                            );
-                            if (date != null && mounted) {
-                              setState(() => _joined = date);
-                            }
-                          },
-                          icon: const Icon(Icons.calendar_today_outlined),
-                          label: Text(
-                            'Joined on ${MaterialLocalizations.of(context).formatCompactDate(_joined)}',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Member number is assigned automatically. No plan or payment is created by this form.',
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const Divider(height: 1),
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: OverflowBar(
-                  alignment: MainAxisAlignment.end,
-                  spacing: 12,
-                  overflowSpacing: 8,
-                  children: [
-                    TextButton(
-                      key: const ValueKey('member-add-cancel'),
-                      onPressed: _saving ? null : () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      key: const ValueKey('member-add-save'),
-                      onPressed: widget.canSave && !_saving && !_uncertain
-                          ? _save
-                          : null,
-                      child: _saving
-                          ? const DumbbellLoader(size: 22)
-                          : Text(
-                              widget.api != null
-                                  ? 'Save member'
-                                  : 'Add to preview',
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

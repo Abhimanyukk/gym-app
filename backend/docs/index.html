@@ -16,8 +16,11 @@ a{color:#a4dcab}table{width:100%}
 <tr><td>POST</td><td>/api/v1/auth/change-password</td><td>Verify current password; revoke all own sessions</td></tr>
 <tr><td>GET, POST</td><td>/api/v1/admins</td><td>Legacy account API; second-admin creation refused</td></tr>
 <tr><td>GET, PUT</td><td>/api/v1/settings</td><td>Read/replace gym settings</td></tr>
-<tr><td>GET, POST</td><td>/api/v1/members</td><td>Directory/registration</td></tr>
-<tr><td>GET</td><td>/api/v1/members/{uuid}</td><td>Basic profile</td></tr>
+<tr><td>GET, POST</td><td>/api/v1/members</td><td>Directory/legacy basic registration</td></tr>
+<tr><td>GET</td><td>/api/v1/enrollment-options</td><td>Plans, prices, add-on rates and UPI payee</td></tr>
+<tr><td>POST</td><td>/api/v1/members/enroll</td><td>Atomic member/photo/plan/full-payment registration</td></tr>
+<tr><td>GET</td><td>/api/v1/enrollments/{request_id}</td><td>Recover saved registration after uncertain response</td></tr>
+<tr><td>GET</td><td>/api/v1/members/{uuid}</td><td>Full profile with registered photo/receipt</td></tr>
 <tr><td>GET</td><td>/api/v1/dashboard/summary</td><td>Real registered-member counts</td></tr></table>
 <h2>Request bodies</h2>
 <pre>Login: {"password":"your password"}
@@ -34,9 +37,43 @@ Resume has no body and returns <code>expires_at, admin</code> after verifying th
 Only key hashes are stored on the server. Sign-out revokes the current key; password changes revoke all keys.</p>
 <p>There is one administrator, no default password, and no username/email requirement.
 The executable's <code>create-admin</code> command prompts for password and confirmation only.
-HTTPS port <code>8443</code> is fixed in the app and server. Readiness requires schema <code>2</code>.</p>
+HTTPS port <code>8443</code> is fixed in the app and server. Server 0.4 requires schema <code>3</code>.</p>
+<h2>Complete member enrollment</h2>
+<p>Fetch <code>/api/v1/enrollment-options</code> before collecting payment.
+Silver costs ₹1,200/₹3,200/₹6,000/₹12,000 and Gold ₹1,700/₹4,700/₹9,000/₹18,000
+for 1/3/6/12 calendar months. Personal training is ₹5,000/month; insurance ₹200/month.
+UPI payee: <code>8943521009@yescred</code>, RepLab Fitness.</p>
+<pre>{
+  "request_id": "00000000-0000-4000-8000-000000000001",
+  "member": {"name":"Test Member","phone":"+91 9876543210",
+             "address":"Synthetic address","emergency_phone":"+91 9876543211"},
+  "photo_base64": "&lt;base64 JPEG/PNG profile photo&gt;",
+  "plan_code": "gold", "months": 3, "starts_on": "&lt;today's IST YYYY-MM-DD&gt;",
+  "training_months": 1, "insurance_months": 2,
+  "payment_method": "upi", "payment_reference": "optional reference",
+  "payment_confirmed": true
+}</pre>
+<p>POST this to <code>/api/v1/members/enroll</code> only after staff verifies the
+full amount received. This example totals ₹10,100 (1,010,000 integer paise).
+Client totals are rejected. Required: address/emergency phone, photo, plan and
+explicit full-payment confirmation. Cash/UPI only; QR scanning is not bank
+verification. Add-ons have independent durations 0 through the plan duration
+and start with the plan. Start date is today through 366 days ahead.
+End dates are inclusive, clamped monthly anniversary minus one day.</p>
+<p>Photos are JPEG/PNG, at most 2 MiB decoded and 1024×1024 pixels.
+The server strips metadata and stores a 512×512-or-smaller JPEG in PostgreSQL.
+The enrollment JSON limit is 3 MiB; other routes remain limited to 16 KiB.
+This is a profile photo, not a biometric template or terminal enrollment.
+Insurance selection does not issue an insurance policy.</p>
+<p>Member, photo/subscription, numbered append-only receipt and audit commit together.
+Generate a new UUID for each registration. Retry the exact same payload/ID after a
+timeout to get the same member/receipt, or GET <code>/api/v1/enrollments/{request_id}</code>
+to check the result. Do not collect payment again. Changed reuse of an ID gives
+<code>409 enrollment_conflict</code>; missing lookup gives <code>404 enrollment_not_found</code>.
+Full profiles contain <code>enrollment</code> and JPEG <code>photo_base64</code>
+when registered; old member records do not invent plans/payments.</p>
 <p>Error format: <code>{"error":{"code":"...","message":"..."}}</code>. Request IDs are in
 <code>X-Request-ID</code>. Login rate-limit responses include <code>Retry-After</code>.</p>
-<p>Attendance, subscriptions, billing and terminal integration are not available yet.
+<p>Attendance, renewals/refunds, billing reports and terminal integration are not available yet.
 Unavailable dashboard totals are <code>null</code>, not invented zeros. An active member record does not establish entry rights.</p>
 </body></html>

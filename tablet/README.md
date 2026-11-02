@@ -14,14 +14,58 @@ old session keys are never sent to a different host.
 
 Implemented: setup, login/logout/session resumption, live dashboard member counts,
 server-paginated member search/registration/detail, gym settings and password changes.
+Registration includes a profile photo, initial subscription and full-payment receipt.
 The existing theme, fixed sidebar, sticky headers and rotating-dumbbell loaders
 are retained.
 
-Attendance, subscriptions, billing and backup status do not have API endpoints.
+Attendance, subscription renewals/refunds, billing reports and backup status do not have API endpoints.
 Their unavailable states remain explicit; live sessions never load sample records.
 Attendance refresh checks server readiness but does not claim to retrieve visits.
 Active/inactive member **record** filters are not subscription-status filters.
 Name sorting sorts the currently loaded page(s); Load more retrieves another 50.
+
+## Add member
+
+Requires backend **0.4.0**, explicitly migrated to **schema 3**. An older server
+can still sign in, but the wizard explains that its server must be upgraded.
+
+1. **Basic details:** name, phone, address and emergency phone are mandatory;
+   email and notes are optional.
+2. **Photo:** allow camera permission and take a clear photo with the member's
+   consent. The inline camera supports switching cameras and retaking. This
+   stores a profile image, not a biometric template or terminal enrollment.
+3. **Plan:** select Silver or Gold and Monthly/Quarterly/Half-yearly/Annual.
+   Optionally choose personal training and insurance durations independently,
+   from one month up to the selected plan duration. Add-ons start with the plan.
+4. **Payment:** collect the **full amount** in Cash or UPI. UPI displays an
+   amount-specific QR for **8943521009@yescred**, **RepLab Fitness**. Staff must
+   check the cash or receiving account and explicitly confirm receipt; neither
+   scanning nor a customer's screenshot proves payment. A UPI reference is optional.
+
+| Plan | 1 month | 3 months | 6 months | 12 months |
+|---|---:|---:|---:|---:|
+| Silver — Strength & Fitness | ₹1,200 | ₹3,200 | ₹6,000 | ₹12,000 |
+| Gold — Silver + Cardio Access | ₹1,700 | ₹4,700 | ₹9,000 | ₹18,000 |
+
+Personal training costs ₹5,000/month; insurance costs ₹200/month. Insurance
+selection records the add-on purchase only; it does not issue an insurance policy.
+Prices use integer paise, with totals validated by the server. A calendar-month
+subscription ends on the clamped monthly anniversary **minus one day**, inclusive.
+For example, 2 November–1 December is one month; 31 January–27 February 2026
+is one month.
+
+Nothing is posted until **Complete registration**. The member, normalized photo,
+subscription, receipt and audit entry commit together. After an uncertain
+response, use **Check registration** or **Retry same registration** without
+collecting payment again. The retry retains the exact payload and ID while the
+dialog stays open; after an app restart, check the directory before registering
+again. Profiles show the saved photo, plan dates, add-on durations and receipt.
+Legacy members honestly show no registered plan/payment instead of invented data.
+
+The camera requests no microphone access. Native camera permission and UPI scans
+still need checking on the actual tablet/phone. Browser camera preview works on
+localhost when camera access is granted. Debug sample mode has no real payment
+QR and never sends registrations to the server.
 
 ## Local browser integration
 

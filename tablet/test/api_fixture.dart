@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gym_management_app/member_enrollment.dart';
 
 Future<void> enterServerLogin(WidgetTester tester) async {
   if (find.byKey(const ValueKey('setup-next')).evaluate().isNotEmpty) {
@@ -50,6 +51,7 @@ class ApiFixture {
     },
   ];
   final members = <Map<String, dynamic>>[member(42)];
+  final enrollments = <String, Map<String, dynamic>>{};
   static Map<String, dynamic> member(int n) => {
     'id': '00000000-0000-0000-0000-${n.toString().padLeft(12, '0')}',
     'number': 'M-${n.toString().padLeft(4, '0')}',
@@ -99,7 +101,7 @@ class ApiFixture {
       });
     }
     if (path == '/health/ready') {
-      return json({'status': 'ready', 'schema': '2', 'database': 'ok'});
+      return json({'status': 'ready', 'schema': '3', 'database': 'ok'});
     }
     if (expired) return error('unauthorized', 'Authentication required.', 401);
     if (request.headers['Authorization'] != 'Bearer $sessionToken') {
@@ -122,6 +124,47 @@ class ApiFixture {
             .add(const Duration(days: 90))
             .toIso8601String(),
       });
+    }
+    if (path == '/api/v1/enrollment-options') {
+      return json(EnrollmentOptions.previewData);
+    }
+    if (path == '/api/v1/members/enroll') {
+      final key = body['request_id'] as String;
+      if (enrollments.containsKey(key)) return json(enrollments[key]!, 201);
+      final options = EnrollmentOptions.fromJson(EnrollmentOptions.previewData);
+      final plan = options.plans.firstWhere((p) => p.code == body['plan_code']);
+      final months = body['months'] as int;
+      final start = DateTime.parse(body['starts_on'] as String);
+      final saved = {
+        ...member(43 + members.length - 1),
+        ...body['member'] as Map<String, dynamic>,
+        'photo_base64': body['photo_base64'],
+        'enrollment': {
+          'plan_name': plan.name,
+          'months': months,
+          'starts_on': isoDate(start),
+          'ends_on': isoDate(enrollmentEnd(start, months)),
+          'training_months': body['training_months'],
+          'insurance_months': body['insurance_months'],
+          'total_paise':
+              plan.prices[months]! +
+              (body['training_months'] as int) * options.trainingMonthly +
+              (body['insurance_months'] as int) * options.insuranceMonthly,
+          'payment_method': body['payment_method'],
+          'payment_reference': body['payment_reference'],
+          'invoice_number': 'RL-000001',
+          'received_at': DateTime.now().toUtc().toIso8601String(),
+        },
+      };
+      members.add(saved);
+      enrollments[key] = saved;
+      return json(saved, 201);
+    }
+    if (path.startsWith('/api/v1/enrollments/')) {
+      final value = enrollments[path.split('/').last];
+      return value == null
+          ? error('enrollment_not_found', 'Registration not found.', 404)
+          : json(value);
     }
     if (path == '/api/v1/dashboard/summary') {
       return json({

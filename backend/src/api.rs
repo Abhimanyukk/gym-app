@@ -1,5 +1,5 @@
 use crate::{
-    AppState,
+    AppState, enrollment,
     error::{ApiError, Result},
     models::*,
     services,
@@ -56,6 +56,12 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         .route("/api/v1/admins", get(admins).post(add_admin))
         .route("/api/v1/settings", get(settings).put(update_settings))
         .route("/api/v1/members", get(members).post(add_member))
+        .route("/api/v1/enrollment-options", get(enrollment_options))
+        .route(
+            "/api/v1/members/enroll",
+            post(enroll_member).layer(DefaultBodyLimit::max(3 * 1024 * 1024)),
+        )
+        .route("/api/v1/enrollments/{request_id}", get(enrollment_lookup))
         .route("/api/v1/members/{member_id}", get(member))
         .route("/api/v1/dashboard/summary", get(dashboard))
         .fallback(|| async {
@@ -158,7 +164,7 @@ where
                     ApiError::new(
                         StatusCode::PAYLOAD_TOO_LARGE,
                         "request_too_large",
-                        "Request body exceeds 16 KiB.",
+                        "Request body exceeds the limit for this endpoint.",
                     )
                 } else {
                     ApiError::validation()
@@ -174,14 +180,14 @@ async fn ready(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
     let versions: Vec<i16> = sqlx::query_scalar("SELECT version FROM replab_schema")
         .fetch_all(&state.pool)
         .await?;
-    if versions != vec![2] {
+    if versions != vec![3] {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "schema_not_ready",
             "Run the database migration.",
         ));
     }
-    Ok(Json(json!({"status":"ready","database":"ok","schema":"2"})))
+    Ok(Json(json!({"status":"ready","database":"ok","schema":"3"})))
 }
 async fn login(
     State(state): State<Arc<AppState>>,
@@ -282,6 +288,33 @@ async fn member(
     services::authenticate(&state, &headers).await?;
     let Path(id) = path.map_err(|_| ApiError::validation())?;
     Ok(Json(services::member(&state, id).await?))
+}
+async fn enrollment_options(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>> {
+    services::authenticate(&state, &headers).await?;
+    Ok(Json(enrollment::options()))
+}
+async fn enroll_member(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    SafeJson(input): SafeJson<enrollment::EnrollmentInput>,
+) -> Result<(StatusCode, Json<Member>)> {
+    let auth = services::authenticate(&state, &headers).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(enrollment::create(&state, auth.admin.id, input).await?),
+    ))
+}
+async fn enrollment_lookup(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    path: std::result::Result<Path<Uuid>, PathRejection>,
+) -> Result<Json<Member>> {
+    services::authenticate(&state, &headers).await?;
+    let Path(id) = path.map_err(|_| ApiError::validation())?;
+    Ok(Json(enrollment::lookup(&state, id).await?))
 }
 async fn dashboard(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Json<Value>> {
     services::authenticate(&state, &headers).await?;

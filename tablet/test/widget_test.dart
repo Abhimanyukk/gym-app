@@ -260,6 +260,20 @@ void main() {
         findsOneWidget,
       );
       expect(find.text(message), findsOneWidget);
+      if (title != 'Dashboard') {
+        final description = find.text(
+          title == 'Members'
+              ? 'All registered members, in one place.'
+              : message,
+        );
+        final rendered = tester.widget<RichText>(
+          find.descendant(of: description, matching: find.byType(RichText)),
+        );
+        expect(
+          rendered.text.style?.fontSize,
+          Theme.of(tester.element(description)).textTheme.bodyMedium?.fontSize,
+        );
+      }
       expect(find.text(previousMessage), findsNothing);
       expect(tester.getTopLeft(sidebar), sidebarPosition);
       previousMessage = message;

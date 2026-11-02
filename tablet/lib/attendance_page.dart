@@ -286,7 +286,7 @@ class _AttendancePageState extends State<AttendancePage>
               const SizedBox(height: 8),
               Text(
                 'See who checked in and when.',
-                style: theme.textTheme.bodyLarge?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),

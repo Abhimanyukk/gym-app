@@ -1,6 +1,7 @@
 pub mod api;
 pub mod config;
 pub mod db;
+pub mod enrollment;
 pub mod error;
 pub mod models;
 pub mod security;

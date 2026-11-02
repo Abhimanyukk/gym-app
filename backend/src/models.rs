@@ -57,7 +57,7 @@ pub struct Settings {
     pub max_admins: i32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MemberInput {
     pub name: String,
@@ -90,6 +90,12 @@ pub struct Member {
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enrollment: Option<serde_json::Value>,
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub photo_base64: Option<String>,
 }
 
 #[derive(Deserialize)]

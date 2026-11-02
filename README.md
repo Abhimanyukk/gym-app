@@ -9,7 +9,7 @@ service on the private Compose network.
 The deployable server now lives separately in **`backend/`**. It includes
 Rust/Axum, PostgreSQL, embedded SQL migrations, admin authentication, the enforced
 single-admin limit, password-only enrollment, remembered sessions, gym settings,
-and basic member registration/list/detail APIs.
+and member registration/list/detail APIs with photos, plans and payment receipts.
 See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testing,
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
@@ -63,8 +63,8 @@ recreating the preview container to use the separate fictional UI fixtures.
 The dashboard contains the greeting, a live gym-local clock (IST), four
 summary cards, and recent check-ins with membership status badges. Only
 the debug preview enables the clearly labelled reference sample data.
-The normal app loads real member counts from the Rust API. Attendance, plans
-and revenue remain unavailable because those backend features are not implemented;
+The normal app loads real member counts from the Rust API. Attendance and
+revenue reporting remain unavailable because those backend features are not implemented;
 it does not invent totals or use preview records in an authenticated session.
 
 Pull down at the top of Dashboard, Attendance, Members, or Settings to refresh,
@@ -110,13 +110,22 @@ Narrow/large-text layouts start with the overview hidden and offer its
 totals from the header. Reduced-motion settings disable the animation.
 
 Members shows a searchable, membership-filtered directory with clickable profiles
-and an Add member form. Profiles include contact details, joining date, plan dates,
-notes, and recent sample attendance. Billing/history remains explicitly unavailable.
+and a four-step Add member wizard: basic details, mandatory camera photo, plan
+and optional add-ons, then full Cash/UPI payment with manual staff confirmation.
+Address and emergency phone are required. Silver/Gold support 1/3/6/12 months;
+personal training and insurance have independently selectable durations up to
+the plan duration. UPI QR includes the exact total for `8943521009@yescred`
+(RepLab Fitness). Scanning is not payment confirmation; staff must verify receipt.
+Profiles include contact details, joining date, plan dates, notes, photo and the
+saved registration receipt. Renewal/refund history is not implemented yet.
 The debug preview has 178 fictional profiles matching the dashboard reference.
 Validated additions are preview-only, remain when changing sidebar sections, and
 disappear on refresh/hot restart. The authenticated app loads and registers real
 records through the Rust API, uses server pagination/search and fetches full
-basic profiles by UUID. No biometric data, plans, or payments are created by the form.
+profiles by UUID. The camera photo is a profile image, not attendance-terminal
+biometric enrollment. Real registration requires backend **0.4.0 / schema 3**;
+see the safe Pi upgrade instructions in `backend/README.md`. Debug fixtures
+disable the payment QR and simulate confirmation without collecting money.
 
 Settings includes single-admin server authentication, password changes,
 gym/contact details and honest terminal/backup availability indicators.

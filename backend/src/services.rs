@@ -357,7 +357,7 @@ pub async fn create_member(state: &AppState, actor: Uuid, input: MemberInput) ->
 }
 
 pub async fn member(state: &AppState, id: Uuid) -> Result<Member> {
-    sqlx::query_as(&format!("{MEMBER_SELECT} WHERE id=$1"))
+    let member = sqlx::query_as(&format!("{MEMBER_SELECT} WHERE id=$1"))
         .bind(id)
         .fetch_optional(&state.pool)
         .await?
@@ -367,7 +367,8 @@ pub async fn member(state: &AppState, id: Uuid) -> Result<Member> {
                 "member_not_found",
                 "Member not found.",
             )
-        })
+        })?;
+    crate::enrollment::decorate(state, member).await
 }
 
 pub async fn members(state: &AppState, query: MemberQuery) -> Result<Value> {

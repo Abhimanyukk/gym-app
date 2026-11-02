@@ -6,6 +6,8 @@ import 'package:gym_management_app/member_profile.dart';
 import 'package:gym_management_app/members_page.dart';
 import 'package:gym_management_app/sample_attendance.dart';
 
+import 'registration_fixture.dart';
+
 Future<void> openMembers(WidgetTester tester, {bool preview = true}) async {
   await tester.pumpWidget(
     GymManagementApp(home: DashboardScreen(showSampleData: preview)),
@@ -121,11 +123,12 @@ void main() {
     await openMembers(tester);
     await tester.tap(find.byKey(const ValueKey('members-add')));
     await tester.pumpAndSettle();
-    final save = find.byKey(const ValueKey('member-add-save'));
-    await tester.tap(save);
+    final next = find.byKey(const ValueKey('member-add-next'));
+    await tester.tap(next);
     await tester.pumpAndSettle();
     expect(find.text('Enter the member’s full name'), findsOneWidget);
-    expect(find.text('Enter a phone number'), findsOneWidget);
+    expect(find.text('Enter a phone number'), findsNWidgets(2));
+    expect(find.text('Enter the address'), findsOneWidget);
     await tester.enterText(
       find.byKey(const ValueKey('member-name')),
       ' Test Member ',
@@ -135,7 +138,7 @@ void main() {
       find.byKey(const ValueKey('member-email')),
       'not-an-email',
     );
-    await tester.tap(save);
+    await tester.tap(next);
     await tester.pumpAndSettle();
     expect(
       find.text('Enter a valid phone number (7–15 digits)'),
@@ -150,7 +153,8 @@ void main() {
       find.byKey(const ValueKey('member-email')),
       'test@example.com',
     );
-    await tester.tap(save);
+    await advanceRegistrationToPayment(tester);
+    await tester.tap(find.byKey(const ValueKey('member-add-save')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('member-add-dialog')), findsNothing);
     final details = find.byKey(const ValueKey('member-details'));
@@ -158,7 +162,7 @@ void main() {
       'Test Member',
       'M-0179',
       'test@example.com',
-      'No plan assigned',
+      'Silver Plan',
     ]) {
       expect(
         find.descendant(of: details, matching: find.text(text)),
@@ -205,7 +209,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         tester
-            .widget<FilledButton>(find.byKey(const ValueKey('member-add-save')))
+            .widget<FilledButton>(find.byKey(const ValueKey('member-add-next')))
             .onPressed,
         isNull,
       );

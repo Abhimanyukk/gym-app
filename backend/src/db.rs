@@ -15,14 +15,17 @@ pub async fn migrate(pool: &PgPool) -> anyhow::Result<()> {
         let versions: Vec<i16> = sqlx::query_scalar("SELECT version FROM replab_schema")
             .fetch_all(&mut *tx)
             .await?;
-        if versions == vec![2] {
+        if versions == vec![3] {
             tx.commit().await?;
             return Ok(());
         }
-        if versions != vec![1] {
+        if versions != vec![1] && versions != vec![2] {
             bail!("Unsupported schema version; nothing was changed.");
         }
-        single_admin(&mut tx).await?;
+        if versions == vec![1] {
+            single_admin(&mut tx).await?;
+        }
+        enrollment(&mut tx).await?;
         tx.commit().await?;
         return Ok(());
     }
@@ -86,8 +89,16 @@ pub async fn migrate(pool: &PgPool) -> anyhow::Result<()> {
     .execute(&mut *tx)
     .await?;
     single_admin(&mut tx).await?;
+    enrollment(&mut tx).await?;
     tx.commit().await?;
-    println!("Schema 2 ready. Existing passwords and business records are preserved.");
+    println!("Schema 3 ready. Existing passwords and business records are preserved.");
+    Ok(())
+}
+
+async fn enrollment(tx: &mut sqlx::Transaction<'_, sqlx::Postgres>) -> anyhow::Result<()> {
+    sqlx::raw_sql(include_str!("../migrations/0003_enrollment.sql"))
+        .execute(&mut **tx)
+        .await?;
     Ok(())
 }
 
