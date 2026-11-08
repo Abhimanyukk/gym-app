@@ -33,7 +33,6 @@ services:
     restart: unless-stopped
     environment:
       <<: *database
-      API_BIND_IP: 0.0.0.0
       ALLOWED_HOSTS: localhost,127.0.0.1
       CORS_ORIGINS: http://localhost:8080
       TLS_CERT_PATH: /certs/server.crt

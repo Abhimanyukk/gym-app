@@ -14,6 +14,11 @@ See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testin
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
 or Docker. Do not deploy this workspace's Flutter development container.
+Backend 0.4.1 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
+address. Use a stable hostname (for this Pi, `lovin.local`) and a matching HTTPS
+certificate so the app is not tied to changing DHCP IPs. The backend guide covers
+the safe upgrade and one-time hostname/certificate setup; mDNS reachability must
+be checked on the actual tablet/network.
 Tablet API integration is implemented; see **`tablet/README.md`** for server
 login, first-admin setup, HTTPS certificate trust and Pi-specific APK builds.
 The physical attendance-terminal integration remains a separate next step.

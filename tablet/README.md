@@ -104,8 +104,17 @@ Fixtures are available only in debug web runs. The production entry point is
 ## Raspberry Pi / Android build
 
 1. Deploy the backend using `../backend/README.md`; create the first admin on it.
-2. Reserve the Pi's private IP and ensure its certificate includes that exact IP.
-3. Copy only its public `server.crt` to `assets/certificates/server.crt`.
+2. Prefer a stable Pi hostname such as **`lovin.local`**, with a certificate
+   covering that exact hostname. Backend 0.4.1 listens on all IPv4 interfaces;
+   future DHCP/Wi-Fi changes do not require changing a hostname certificate.
+   See the backend README's one-time hostname/certificate setup. Verify `.local`
+   resolution on the actual tablet/network; use managed local DNS if mDNS is
+   unsupported or blocked. An IP-only certificate still needs updating if its IP changes.
+3. Copy only its public certificate to `assets/certificates/server.crt`.
+   Use the certificate specified by `TLS_CERT_PATH`: fresh installations use
+   `/etc/replab/server.crt`; the hostname upgrade uses
+   `/etc/replab/hostname-v0.4.1/server.crt`. Substitute the appropriate path below;
+   do not accidentally copy the retained, old IP-only certificate.
    The protected `/etc/replab` directory cannot be read directly by the ordinary
    SSH user. On the Pi (substitute your SSH user's home if it is not `pi`):
 
@@ -124,11 +133,11 @@ Fixtures are available only in debug web runs. The production entry point is
    Verify that the SHA-256 certificate fingerprints match before trusting or
    bundling it. Never copy `server.key`, environment files, DB passwords or
    member records.
-4. Build inside the existing Flutter container; substitute the actual Pi IP:
+4. Build inside the existing Flutter container; substitute the stable Pi hostname:
 
 ```powershell
 docker exec -w /workspace/tablet gym-app-build flutter pub get
-docker exec -w /workspace/tablet gym-app-build flutter build apk --release --dart-define=API_BASE_URL=https://192.168.1.50:8443
+docker exec -w /workspace/tablet gym-app-build flutter build apk --release --dart-define=API_BASE_URL=https://lovin.local:8443
 ```
 
 APK: `build/app/outputs/flutter-apk/app-release.apk`.
@@ -143,7 +152,7 @@ expiry; it never installs an accept-all certificate callback.
 
 Rebuild with the Pi's public certificate before deploying an APK built with the
 Windows development server certificate. Changing the host in Advanced settings
-does not change certificate trust. Renewal/IP changes require coordinated
+does not change certificate trust. Certificate renewal or identity changes require coordinated
 client trust updates. Current APK release signing uses the existing debug
 keystore; configure your own release keystore before a production rollout.
 
@@ -167,7 +176,7 @@ browser API access is intentionally disabled until its exact origin is allowed.
    Import-Certificate -FilePath (Resolve-Path .\tablet\assets\certificates\server.crt).Path -CertStoreLocation Cert:\CurrentUser\Root
    ```
 
-   Restart the browser, then open `https://<PI_IP>:8443/health/ready`.
+   Restart the browser, then open `https://<PI_HOSTNAME>.local:8443/health/ready`.
    It must show ready JSON without a certificate warning. Other browsers may
    require configuring their own certificate store.
 2. On the Pi, use `sudoedit /etc/replab/runtime.env` to change **only** this line
@@ -180,10 +189,10 @@ browser API access is intentionally disabled until its exact origin is allowed.
    Keep the file private; never paste its contents into a support message.
    Then run `sudo systemctl restart replab`. If the preview uses another origin,
    allow that exact scheme, hostname and port instead; never use `*`.
-3. In the preview setup, enter only the Pi IP or hostname. To pre-fill it:
+3. In the preview setup, enter the stable Pi hostname (`lovin.local`). To pre-fill it:
 
    ```powershell
-   $env:API_BASE_URL = 'https://192.168.1.50:8443'
+   $env:API_BASE_URL = 'https://lovin.local:8443'
    docker compose -f compose.preview.yaml up -d --force-recreate
    ```
 

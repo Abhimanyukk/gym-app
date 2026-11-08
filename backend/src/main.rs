@@ -7,7 +7,7 @@ use replab_server::{
     models::AdminInput,
     services,
 };
-use std::{net::IpAddr, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 #[derive(Parser)]
 #[command(version, about = "RepLab native Rust gym server")]
@@ -20,7 +20,7 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
-    /// Run HTTPS; --http is development-only and refuses non-loopback binding.
+    /// Run HTTPS on all IPv4 interfaces; --http is development-only on loopback.
     Serve {
         #[arg(long)]
         http: bool,
@@ -33,8 +33,9 @@ enum Command {
     Configure {
         #[arg(long, default_value = "/etc/replab")]
         directory: PathBuf,
-        #[arg(long, default_value = "127.0.0.1")]
-        bind_ip: IpAddr,
+        /// Stable client/server certificate name, not a DHCP address.
+        #[arg(long, default_value = "replab.local")]
+        hostname: String,
     },
 }
 
@@ -54,8 +55,12 @@ async fn main() -> anyhow::Result<()> {
     if let Some(path) = cli.env_file {
         dotenvy::from_path_override(path).context("Cannot load configuration file")?;
     }
-    if let Command::Configure { directory, bind_ip } = cli.command {
-        return config::configure(&directory, bind_ip);
+    if let Command::Configure {
+        directory,
+        hostname,
+    } = cli.command
+    {
+        return config::configure(&directory, &hostname);
     }
     let pool = config::database_pool().await?;
     if matches!(cli.command, Command::Migrate) {

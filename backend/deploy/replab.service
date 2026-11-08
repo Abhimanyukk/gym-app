@@ -1,7 +1,6 @@
 [Unit]
 Description=RepLab Rust gym API
-Wants=network-online.target
-After=network-online.target postgresql.service
+After=postgresql.service
 Requires=postgresql.service
 StartLimitIntervalSec=60
 StartLimitBurst=10

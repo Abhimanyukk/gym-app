@@ -83,6 +83,8 @@ async fn sign_in(app: &Router, password: &str) -> String {
 #[tokio::test]
 async fn postgres_api_contract_security_and_legacy_adoption() {
     assert_eq!(Config::from_env(true).unwrap().bind.port(), 8443);
+    assert!(Config::from_env(false).unwrap().bind.ip().is_unspecified());
+    assert!(Config::from_env(true).unwrap().bind.ip().is_loopback());
     // No fixture reset/migration may ever touch the deployment DB.
     assert_eq!(
         env::var("POSTGRES_DB").as_deref(),
@@ -94,7 +96,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     let runtime = pool("replab_app", &env::var("POSTGRES_PASSWORD").unwrap()).await;
     let config = Config {
         bind: "127.0.0.1:8443".parse().unwrap(),
-        hosts: vec!["localhost".into()],
+        hosts: vec!["localhost".into(), "lovin.local".into()],
         origins: vec!["http://localhost:8080".into()],
         cert: "unused".into(),
         key: "unused".into(),
@@ -104,6 +106,8 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     let app = api::router(state.clone()).unwrap();
     for (authority, expected) in [
         ("localhost:8443", StatusCode::OK),
+        ("lovin.local:8443", StatusCode::OK),
+        ("LOVIN.local:8443", StatusCode::OK),
         ("untrusted.example:8443", StatusCode::BAD_REQUEST),
     ] {
         let request = Request::builder()

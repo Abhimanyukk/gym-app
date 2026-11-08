@@ -49,9 +49,119 @@ does not imply a valid subscription or entry rights.
 The tablet enrolls once using the server password, then securely remembers a
 random session key, never the password. Optional biometrics gate local unlock;
 the key must still pass server authentication. HTTPS port **8443 is hardcoded**
-in the executable and app. `API_PORT` entries in old configurations are ignored.
-Only the bind address, allowed hosts/origins, certificate paths and database
+in the executable and app. `API_PORT` and `API_BIND_IP` entries in old configurations
+are ignored in v0.4.1. HTTPS listens on **all IPv4 interfaces (`0.0.0.0:8443`)**;
+development HTTP always stays on `127.0.0.1:8443`. Only allowed hosts/origins, certificate paths and database
 connection settings remain configurable.
+
+## Network-independent startup — v0.4.1
+
+The server no longer binds to a DHCP address or waits for `network-online.target`.
+It can start with no Wi-Fi and continue listening when Wi-Fi/Ethernet or an IPv4
+address changes. PostgreSQL still stays local. An old `API_BIND_IP` value cannot
+make startup fail with `Cannot assign requested address`.
+
+Listening and identification are separate. For the tablet to keep using the same
+secure address after DHCP changes, use a stable hostname such as **`lovin.local`**
+(your Pi's current hostname), not a changing IP. Keep the Host allowlist, HTTPS
+hostname verification, saved-session authentication and browser CORS restrictions.
+Do not set `ALLOWED_HOSTS=*` or disable certificate checks.
+
+All-interface binding includes every IPv4 network interface: expose port 8443
+only to trusted local clients using the Pi/network firewall, never public router
+port forwarding. This does not make an IPv6-only network supported.
+
+### Upgrade the existing v0.4.0 Pi
+
+Package: `build/replab-linux-arm64-v0.4.1.tar.gz` with its SHA-256 sidecar.
+Transfer it using the Pi's currently reachable address (or working hostname),
+verify the checksum, and extract into a new directory:
+
+```sh
+cd ~
+sha256sum replab-linux-arm64-v0.4.1.tar.gz
+cat replab-linux-arm64-v0.4.1.tar.gz.sha256
+# Continue only if the digests match.
+mkdir ~/replab-release-v0.4.1
+tar -xzf replab-linux-arm64-v0.4.1.tar.gz -C ~/replab-release-v0.4.1
+cd ~/replab-release-v0.4.1
+./replab-server --version
+ldd ./replab-server
+sudo sh /opt/replab/tools/backup.sh "/var/backups/replab/pre-v0.4.1-$(date +%Y%m%d-%H%M%S).dump" --verify
+```
+
+After all checks pass:
+
+```sh
+sudo systemctl stop replab
+# Refuse to replace an earlier rollback copy.
+sudo test ! -e /opt/replab/replab-server-pre-v0.4.1
+sudo test ! -e /etc/systemd/system/replab.service-pre-v0.4.1
+sudo cp -an /opt/replab/replab-server /opt/replab/replab-server-pre-v0.4.1
+sudo cp -an /etc/systemd/system/replab.service /etc/systemd/system/replab.service-pre-v0.4.1
+sudo install -o root -g root -m 755 ./replab-server /opt/replab/replab-server
+sudo cp -r tools /opt/replab/
+sudo install -m 644 deploy/replab.service /etc/systemd/system/replab.service
+sudo systemctl daemon-reload
+sudo systemctl reset-failed replab
+sudo systemctl start replab
+sudo curl --cacert /etc/replab/server.crt https://127.0.0.1:8443/health/ready
+```
+
+The schema is still **3**: no new migration, DB initialization, admin creation or
+credential reset is needed when upgrading from v0.4.0. Existing certificates
+and sessions are untouched. The final local health check uses the existing
+certificate's loopback SAN, independent of the Wi-Fi IP.
+
+### One-time stable hostname / certificate setup
+
+On the Pi:
+
+```sh
+hostname -s                 # lovin on your current Pi
+sudo apt install -y avahi-daemon
+sudo systemctl enable --now avahi-daemon
+```
+
+Use that hostname plus `.local`. In your existing `/etc/replab/runtime.env`,
+append `lovin.local` to `ALLOWED_HOSTS`, preserving existing entries and all secrets.
+An IP-only certificate does not cover a new hostname. Generate a hostname
+certificate in a **new** directory, without overwriting the existing key/cert:
+
+```sh
+sudo sh /opt/replab/tools/create-cert.sh lovin.local /etc/replab/hostname-v0.4.1
+sudo openssl x509 -in /etc/replab/hostname-v0.4.1/server.crt -noout -checkhost lovin.local -fingerprint -sha256
+```
+
+Keep the existing certificate directory untouched. Copy **only the new public**
+`server.crt` to the tablet's `assets/certificates/server.crt`, verify its fingerprint,
+and rebuild the APK yourself. Configure preview-browser trust for the same
+verified public certificate. Before activating it, confirm clients are ready.
+Then use `sudoedit /etc/replab/runtime.env` to change only:
+
+```dotenv
+TLS_CERT_PATH=/etc/replab/hostname-v0.4.1/server.crt
+TLS_KEY_PATH=/etc/replab/hostname-v0.4.1/server.key
+```
+
+Restart RepLab, and check:
+
+```sh
+sudo systemctl restart replab
+sudo curl --cacert /etc/replab/hostname-v0.4.1/server.crt https://lovin.local:8443/health/ready
+```
+
+Set the app's **Advanced settings → Server hostname** to `lovin.local` (no port).
+Changing the saved host deliberately asks for the server password once; subsequent
+launches resume the saved session. Future DHCP changes do not require a new
+certificate or a different app host as long as the hostname resolves correctly.
+
+`.local` uses local multicast DNS, not an internet service. The Pi and client must
+be on a reachable network that permits multicast; guest isolation/hotspots can
+block it. Android's built-in `.local` resolution is available from November 2021
+resolver updates and must be verified on the actual tablet. If mDNS is unsupported
+or blocked, configure ordinary local DNS for a stable name instead; don't bypass
+HTTPS. A hostname conflict also needs resolving rather than assuming identity.
 
 ## Upgrade an existing v0.2/v0.3 Pi to v0.4 without resetting data
 
@@ -109,7 +219,8 @@ is now password-only. Existing keys retain their expiry until successfully resum
 ## 1. Prepare the Pi
 
 Use Raspberry Pi OS Lite **64-bit** with SSH, your own user, reliable power and
-NTP. Reserve its private LAN IP in your router. Ethernet is preferable.
+NTP. Use a unique, stable hostname; Ethernet is preferable. A reserved IP is
+optional for operations, not a server startup requirement.
 
 ```sh
 uname -m                  # aarch64
@@ -118,8 +229,9 @@ hostname -I
 timedatectl status
 df -h /
 sudo apt update
-sudo apt install -y postgresql-17 postgresql-client-17 openssl ca-certificates curl
+sudo apt install -y postgresql-17 postgresql-client-17 openssl ca-certificates curl avahi-daemon
 sudo systemctl enable --now postgresql
+sudo systemctl enable --now avahi-daemon
 psql --version
 pg_lsclusters
 ```
@@ -143,7 +255,7 @@ rules in `pg_hba.conf`; do not add LAN-wide `trust` rules or expose port 5432.
 
 ## 2. Obtain the executable-only deployment package
 
-After a build here, `build/replab-linux-arm64-v0.4.0.tar.gz` contains:
+After a build here, `build/replab-linux-arm64-v0.4.1.tar.gz` contains:
 
 - `replab-server`
 - `deploy/replab.service`
@@ -153,10 +265,11 @@ After a build here, `build/replab-linux-arm64-v0.4.0.tar.gz` contains:
 There are **no application source files, credentials, certificates, database
 files, or sample member records** in the package. A SHA-256 sidecar is supplied.
 
-From Windows PowerShell in `backend/`, replace the SSH user/IP:
+From Windows PowerShell in `backend/`, replace the SSH user/hostname (or use
+the currently reachable IP just for transferring the package):
 
 ```powershell
-scp build/replab-linux-arm64-v0.4.0.tar.gz build/replab-linux-arm64-v0.4.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_IP:~/
+scp build/replab-linux-arm64-v0.4.1.tar.gz build/replab-linux-arm64-v0.4.1.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_HOST:~/
 ```
 
 On the Pi:
@@ -164,10 +277,10 @@ On the Pi:
 ```sh
 cd ~
 # The sidecar's recorded path may include build/; compare the digest explicitly:
-sha256sum replab-linux-arm64-v0.4.0.tar.gz
-cat replab-linux-arm64-v0.4.0.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.4.1.tar.gz
+cat replab-linux-arm64-v0.4.1.tar.gz.sha256
 mkdir -p ~/replab-release
-tar -xzf replab-linux-arm64-v0.4.0.tar.gz -C ~/replab-release
+tar -xzf replab-linux-arm64-v0.4.1.tar.gz -C ~/replab-release
 cd ~/replab-release
 ./replab-server --version
 ldd ./replab-server
@@ -181,7 +294,7 @@ and the committed lockfile:
 
 ```sh
 cargo build --locked --release
-sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.4.0.tar.gz
+sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.4.1.tar.gz
 ```
 
 Compilers/source may be on a build machine; they are not production prerequisites.
@@ -198,12 +311,12 @@ sudo install -d -o root -g replab -m 750 /etc/replab
 sudo install -o root -g root -m 755 ./replab-server /opt/replab/replab-server
 sudo cp -r tools /opt/replab/
 
-# Replace 192.168.1.50 with the Pi's reserved LAN address:
-sudo /opt/replab/replab-server configure --directory /etc/replab --bind-ip 192.168.1.50
+# Use the Pi's stable hostname, not its current DHCP address:
+sudo /opt/replab/replab-server configure --directory /etc/replab --hostname "$(hostname -s).local"
 sudo chown root:replab /etc/replab/runtime.env
 sudo chmod 640 /etc/replab/runtime.env
 # owner.env stays root-only (0600), never loaded by the API service.
-sudo sh /opt/replab/tools/create-cert.sh 192.168.1.50
+sudo sh /opt/replab/tools/create-cert.sh "$(hostname -s).local"
 sudo sh /opt/replab/tools/init-db.sh
 sudo /opt/replab/replab-server --env-file /etc/replab/owner.env migrate
 sudo /opt/replab/replab-server --env-file /etc/replab/runtime.env create-admin
@@ -230,7 +343,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now replab
 sudo systemctl status replab --no-pager
 sudo journalctl -u replab -n 50 --no-pager
-sudo curl --cacert /etc/replab/server.crt https://192.168.1.50:8443/health/ready
+sudo curl --cacert /etc/replab/server.crt "https://$(hostname -s).local:8443/health/ready"
 ```
 
 Use `sudo` for this check: `/etc/replab` is restricted to root and the `replab`
@@ -244,12 +357,13 @@ Migrations are manual operator actions, never automatic API startup resets.
 If PostgreSQL is down, startup fails safely and systemd retries; an unmigrated
 database never reports ready.
 
-The API is `https://<PI_IP>:8443`; `/docs` is a self-contained **static API
+The API is `https://<PI_HOSTNAME>.local:8443`; `/docs` is a self-contained **static API
 reference**, not Swagger or an interactive OpenAPI UI.
 
 Clients must trust/pin the public `server.crt`; never disable certificate
 validation. The self-signed certificate is valid for one year and includes the
-chosen IP; plan renewal and client trust updates before expiry.
+chosen hostname (legacy IP certificates are also supported); plan renewal and
+client trust updates before expiry.
 Restrict port 8443 to trusted LAN clients in the Pi/network firewall; do not
 forward it publicly. Native tablet clients need no CORS setting. Browser
 integration needs exact trusted origins in `CORS_ORIGINS`, never `*`.
@@ -459,11 +573,15 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked --lib              # password/token unit check, no DB
 cargo test --locked                   # requires isolated PostgreSQL fixture
 cargo build --locked --release
+sh tests/certificates.sh              # disposable Linux build container, root/replab group
 ```
 
 Tests cover auth/session expiry/revocation, persisted throttling, concurrent
 admin cap, runtime permissions, pagination/search, settings/member persistence,
 secret-redacted validation, request limits, audit rollback and legacy adoption.
+Configuration tests verify all-interface HTTPS and loopback-only HTTP even when
+`API_BIND_IP` contains an unavailable legacy IP. Certificate checks cover DNS/IP
+identities, name validation, permissions and overwrite refusal.
 Enrollment checks cover catalogue/prices, required contact/photo/full-payment
 validation, large-photo body limits, atomic rollback, concurrent duplicate
 submissions, conflicting retries, JPEG normalization and append-only receipts.
@@ -475,7 +593,7 @@ rustup target add aarch64-unknown-linux-gnu
 sudo apt install gcc-aarch64-linux-gnu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
   cargo build --locked --release --target aarch64-unknown-linux-gnu
-sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.4.0.tar.gz
+sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.4.1.tar.gz
 ```
 
 ## Existing Python-era PostgreSQL databases

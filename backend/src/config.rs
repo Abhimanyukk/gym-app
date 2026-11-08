@@ -6,7 +6,7 @@ use sqlx::{
 };
 use std::{
     env,
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -25,25 +25,21 @@ pub struct Config {
 
 impl Config {
     pub fn from_env(http: bool) -> anyhow::Result<Self> {
-        let ip: IpAddr = env::var("API_BIND_IP")
-            .unwrap_or_else(|_| "127.0.0.1".into())
-            .parse()?;
-        if http && !ip.is_loopback() {
-            bail!("Unencrypted HTTP is permitted only on loopback.");
-        }
-        if !ip.is_unspecified()
-            && !ip.is_loopback()
-            && !matches!(ip, IpAddr::V4(v) if v.is_private())
-        {
-            bail!("Use a private LAN address, not a public address.");
-        }
-        let hosts = list("ALLOWED_HOSTS", "localhost,127.0.0.1");
+        // A socket on all interfaces survives DHCP/Wi-Fi changes. Ignore legacy
+        // API_BIND_IP values; development HTTP must still stay on loopback.
+        // dover-gain-efficient: IPv4; add dual-stack listening if IPv6-only LANs are required.
+        let ip = if http {
+            Ipv4Addr::LOCALHOST
+        } else {
+            Ipv4Addr::UNSPECIFIED
+        };
+        let hosts = list("ALLOWED_HOSTS", "localhost,127.0.0.1,replab.local");
         let origins = list("CORS_ORIGINS", "");
         if hosts.is_empty() || hosts.iter().chain(&origins).any(|s| s.contains('*')) {
             bail!("Hosts and origins must be explicit; wildcards are not permitted.");
         }
         Ok(Self {
-            bind: SocketAddr::new(ip, API_PORT),
+            bind: SocketAddr::new(ip.into(), API_PORT),
             hosts,
             origins,
             http,
@@ -89,10 +85,8 @@ pub async fn database_pool() -> anyhow::Result<PgPool> {
         .map_err(|_| anyhow::anyhow!("Cannot connect to PostgreSQL; check local configuration."))
 }
 
-pub fn configure(directory: &Path, ip: IpAddr) -> anyhow::Result<()> {
-    if !(ip.is_loopback() || matches!(ip, IpAddr::V4(v) if v.is_private())) {
-        bail!("Use a specific loopback or private IPv4 address.");
-    }
+pub fn configure(directory: &Path, hostname: &str) -> anyhow::Result<()> {
+    let hostname = server_name(hostname)?;
     std::fs::create_dir_all(directory)?;
     let runtime = directory.join("runtime.env");
     let owner = directory.join("owner.env");
@@ -109,13 +103,36 @@ pub fn configure(directory: &Path, ip: IpAddr) -> anyhow::Result<()> {
     write_private(
         &runtime,
         &format!(
-            "{common}POSTGRES_USER=replab_app\nPOSTGRES_PASSWORD={app_password}\nAPI_BIND_IP={ip}\n\
-        ALLOWED_HOSTS=localhost,127.0.0.1,{ip}\nCORS_ORIGINS=\n\
+            "{common}POSTGRES_USER=replab_app\nPOSTGRES_PASSWORD={app_password}\n\
+        ALLOWED_HOSTS=localhost,127.0.0.1,{hostname}\nCORS_ORIGINS=\n\
         TLS_CERT_PATH=/etc/replab/server.crt\nTLS_KEY_PATH=/etc/replab/server.key\n"
         ),
     )?;
     println!("Created owner.env and runtime.env. Keep both private; never commit them.");
     Ok(())
+}
+
+pub fn server_name(value: &str) -> anyhow::Result<String> {
+    if let Ok(ip) = value.parse::<IpAddr>() {
+        if matches!(ip, IpAddr::V4(v) if v.is_loopback() || v.is_private()) {
+            return Ok(value.to_owned());
+        }
+    } else if !value.is_empty()
+        && !value.bytes().all(|ch| ch.is_ascii_digit() || ch == b'.')
+        && value.len() <= 253
+        && value.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && label.as_bytes()[0].is_ascii_alphanumeric()
+                && label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+                && label
+                    .bytes()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == b'-')
+        })
+    {
+        return Ok(value.to_ascii_lowercase());
+    }
+    bail!("Use a hostname without scheme/port/path, or a private IPv4 address.");
 }
 
 fn write_private(path: &Path, contents: &str) -> anyhow::Result<()> {
@@ -131,4 +148,50 @@ fn write_private(path: &Path, contents: &str) -> anyhow::Result<()> {
     file.write_all(contents.as_bytes())?;
     file.sync_all()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn https_ignores_network_address_and_http_stays_local() {
+        assert_eq!(
+            Config::from_env(false).unwrap().bind,
+            "0.0.0.0:8443".parse().unwrap()
+        );
+        assert_eq!(
+            Config::from_env(true).unwrap().bind,
+            "127.0.0.1:8443".parse().unwrap()
+        );
+    }
+
+    #[test]
+    fn stable_server_names_are_validated() {
+        for name in [
+            "lovin.local",
+            "replab.local",
+            "gym.example.com",
+            "127.0.0.1",
+            "172.20.10.3",
+        ] {
+            assert_eq!(server_name(name).unwrap(), name);
+        }
+        assert_eq!(server_name("LOVIN.local").unwrap(), "lovin.local");
+        for name in [
+            "",
+            "https://lovin.local",
+            "lovin.local:8443",
+            "a,b",
+            "*.local",
+            "-lovin.local",
+            "lovin..local",
+            "0.0.0.0",
+            "8.8.8.8",
+            "::1",
+            "999.999.999.999",
+        ] {
+            assert!(server_name(name).is_err(), "{name}");
+        }
+    }
 }
