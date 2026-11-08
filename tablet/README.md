@@ -136,7 +136,9 @@ Fixtures are available only in debug web runs. The production entry point is
 
 ## Raspberry Pi / Android build
 
-1. Deploy the backend using `../backend/README.md`; create the first admin on it.
+1. Install/update the backend `.deb` using `../backend/README.md`. Only a fresh
+   Pi runs `sudo replab-setup` to choose its first admin password; existing
+   administrator/session/certificate configuration is preserved.
 2. Prefer a stable Pi hostname such as **`lovin.local`**, with a certificate
    covering that exact hostname. Backend 0.4.1 listens on all IPv4 interfaces;
    future DHCP/Wi-Fi changes do not require changing a hostname certificate.
@@ -300,7 +302,8 @@ docker exec -w /workspace/tablet gym-app-build flutter test --no-pub
 
 Default tests use synthetic HTTP responses and exercise the complete UI-to-client
 contract: first setup, remembered sessions with/without biometrics, member
-persistence/search/details, advanced settings, revocation, offline states, and serialization.
+persistence/search/details, advanced settings, plan editing/custom-duration
+registration, stale-price rejection, revocation, offline states, and serialization.
 `test/native_https_test.dart` additionally checks actual HTTPS and persistent
 writes against an explicitly prepared, fresh `replab_test` database served on
 `https://localhost:8443`. Its two checks are skipped by default; never point them

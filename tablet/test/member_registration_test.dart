@@ -331,7 +331,7 @@ void main() {
     await tap(tester, 'member-add-save');
     expect(find.textContaining('Plans changed'), findsOneWidget);
     expect(fixture.enrollments, isEmpty);
-    await tester.tap(find.text('Reload plans'));
+    await tester.tap(find.text('Retry plans'));
     await tester.pumpAndSettle();
     await tap(tester, 'member-plan-silver');
     await tap(tester, 'member-add-next');

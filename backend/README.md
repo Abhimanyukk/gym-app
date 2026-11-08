@@ -13,6 +13,74 @@ The executable is Linux ARM64 and dynamically uses standard Linux system
 libraries; build against an OS compatible with the Pi, not Windows.
 Current release: **0.5.0**, database **schema 4**.
 
+## Simple native installation / update
+
+Use **`build/replab-server_0.5.0-1_arm64.deb`** on Raspberry Pi OS **64-bit**
+(Bookworm or newer). Copy it to the Pi, then run just:
+
+```sh
+sudo apt install ./replab-server_0.5.0-1_arm64.deb
+```
+
+The package installs required host dependencies, including PostgreSQL if needed;
+no Docker, Rust compiler or application source is deployed. For your existing
+Pi it keeps the administrator/password, sessions, database and TLS configuration.
+The installer stops API writes, creates a **restore-verified backup**, preserves
+the previous executable/private configuration, explicitly migrates to schema 4,
+starts the systemd service, and checks HTTPS readiness locally. It does not need
+the current Wi-Fi IP or functioning `.local` resolution for that check.
+
+On a **fresh Pi only**, finish by choosing your server password:
+
+```sh
+sudo replab-setup
+```
+
+This is the existing secure password/confirmation prompt. There is no default
+password and no public bootstrap endpoint. Repeating it on an existing installation
+does not change the administrator/password.
+
+Transfer from this workspace's `backend/` directory, using the working Pi name/IP:
+
+```powershell
+scp build/replab-server_0.5.0-1_arm64.deb pi@lovin.local:~/
+```
+
+A `.sha256` sidecar is available for independent transfer verification. Install
+only a package received from your trusted build/operator.
+
+Fresh setup uses the Pi's existing hostname plus `.local` for its certificate.
+The public client certificate is exported to **`/var/lib/replab-client/server.crt`**,
+readable by the ordinary SSH user. Verify its fingerprint before trusting it in
+the browser or bundling it into the tablet app. Existing TLS identity is not
+regenerated. There is no accept-all certificate or firewall bypass.
+
+### Safety, retries and removal
+
+- Native installation expects the existing generated `runtime.env`/`owner.env`,
+  matching restricted roles, and local PostgreSQL at `127.0.0.1:5432`.
+  Custom ports/remote databases or incomplete configuration are refused, not reset.
+- Upgrade backups live in **`/var/backups/replab/install-…/`** (root-only). They
+  contain the verified database dump, previous application and sensitive private
+  configuration/key material. Copy them to protected off-Pi storage; the same
+  memory card is not a backup against card failure. No automatic deletion/rotation.
+- The package payload is staged in `/usr/lib/replab`; the running executable at
+  `/opt/replab` is not replaced during package unpacking. It is activated only
+  after the pre-upgrade backup/restore check succeeds.
+- Failed backups leave the old executable in place. A failure after stopping
+  the API leaves it stopped and retains backups; it never silently restores data
+  or starts an old executable on a newer schema. Fix the reported cause and run
+  `sudo dpkg --configure -a` to retry a failed package configuration.
+- Package-managed service defaults are installed under `/lib/systemd/system`;
+  existing `/etc/systemd/system/replab.service` overrides are preserved.
+- Removing/purging the package stops/disables the API but **retains** PostgreSQL,
+  `/etc/replab`, `/opt/replab`, exported public certificate and backups. Removing
+  financial/member records is never an uninstall side effect.
+
+The detailed tarball/manual procedures below remain available for advanced
+operators; they are no longer required for a normal `.deb` install/update.
+Update the tablet app alongside the schema-4 server before registering new members.
+
 ## Implemented scope
 
 - Axum/Tokio API; SQLx PostgreSQL pool capped at five connections.
@@ -704,7 +772,23 @@ sudo apt install gcc-aarch64-linux-gnu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
   cargo build --locked --release --target aarch64-unknown-linux-gnu
 sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.5.0.tar.gz
+# Preferred one-command Pi installer:
+sh tools/package-deb.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-server_0.5.0-1_arm64.deb
 ```
+
+Installer lifecycle checks use actual `dpkg` unpack/configure/remove in a
+disposable root container, with PostgreSQL/systemd/API mocked. The source mount
+must be read-only and `REPLAB_DISPOSABLE_INSTALL_TEST=1`; never run this test on a
+real Pi or development database:
+
+```sh
+python3 /source/tests/install_package_test.py
+```
+
+These checks cover fresh setup, manual-install adoption, verification before
+activation, preserved credentials/receipts, retries, failed backups/migrations/
+health checks, and non-destructive removal. Actual ARM64 execution, apt dependency
+resolution and systemd startup on the physical Pi still need operator verification.
 
 ## Existing Python-era PostgreSQL databases
 

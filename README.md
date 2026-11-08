@@ -14,6 +14,11 @@ See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testin
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
 or Docker. Do not deploy this workspace's Flutter development container.
+The preferred Pi installer is **`backend/build/replab-server_0.5.0-1_arm64.deb`**:
+copy it to the Pi and run `sudo apt install ./replab-server_0.5.0-1_arm64.deb`.
+It handles host dependencies, verified upgrade backups, migration and service
+startup without resetting credentials or certificates. A fresh Pi additionally
+runs `sudo replab-setup` once to choose its admin password; see the backend guide.
 Backend 0.5.0 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
 address. Use a stable hostname (for this Pi, `lovin.local`) and a matching HTTPS
 certificate so the app is not tied to changing DHCP IPs. The backend guide covers
@@ -119,7 +124,7 @@ and a four-step Add member wizard: basic details, mandatory camera photo, plan
 and optional add-ons, then full Cash/UPI payment with manual staff confirmation.
 Address and emergency phone are required. Plans and duration prices come from
 the saved server catalogue; Silver/Gold initially support 1/3/6/12 months.
-personal training and insurance have independently selectable durations up to
+Personal training and insurance have independently selectable durations up to
 the plan duration. UPI QR includes the exact total for `8943521009@yescred`
 (RepLab Fitness). Scanning is not payment confirmation; staff must verify receipt.
 Profiles include contact details, joining date, plan dates, notes, photo and the
