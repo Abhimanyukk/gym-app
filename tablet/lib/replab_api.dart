@@ -207,11 +207,16 @@ class RepLabApi extends ChangeNotifier {
         final stream = await _client!.send(req);
         return http.Response.fromStream(stream);
       })().timeout(timeout);
-    } catch (_) {
+    } catch (error) {
+      final message = error is TimeoutException
+          ? 'The server at ${base.host} did not respond in time. Check your '
+                'connection and that RepLab is running.'
+          : apiTransportError(error, base.host) ??
+                'Cannot reach the server. Check the address, connection and trusted certificate.';
       throw ApiException(
         mutation
-            ? 'No confirmed response from the server. Check your connection and certificate. The change may have been saved; check records before submitting again.'
-            : 'Cannot reach the server. Check the address, connection and trusted certificate.',
+            ? 'No confirmed response from the server. $message The change may have been saved; check records before submitting again.'
+            : message,
         code: 'connection_failed',
         uncertain: mutation,
       );

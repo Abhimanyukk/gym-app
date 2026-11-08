@@ -201,6 +201,31 @@ distinguish certificate, CORS, local-network permission, and timeout errors.
 Do not disable TLS verification or browser security. Native Android needs the
 Pi certificate bundled in its APK, but does not need browser CORS permission.
 
+### Hostname connection troubleshooting
+
+Changing setup to `lovin.local` does **not** update the certificate bundled in
+an installed APK. The Pi's active certificate must include `DNS:lovin.local`,
+and the app must trust that certificate. Follow the backend README's one-time
+hostname setup if the active certificate still contains only the old IP.
+
+These read-only Pi checks show the version, allowed hosts and active public
+certificate without printing database passwords or private keys:
+
+```sh
+/opt/replab/replab-server --version
+sudo grep -E '^(ALLOWED_HOSTS|TLS_CERT_PATH)=' /etc/replab/runtime.env
+CERT=$(sudo sed -n 's/^TLS_CERT_PATH=//p' /etc/replab/runtime.env)
+sudo openssl x509 -in "$CERT" -noout -ext subjectAltName -fingerprint -sha256
+sudo curl --connect-timeout 5 --max-time 15 --cacert "$CERT" https://lovin.local:8443/health/ready
+```
+
+The health check must return ready JSON. A successful Pi-local check does not
+prove that the tablet can resolve `.local` or reach the server. Copy only the
+active public certificate to `tablet/assets/certificates/server.crt`, verify its
+fingerprint against the Pi output, then rebuild and install the APK yourself.
+Native errors distinguish TLS handshakes, network reachability and timeouts;
+the preview still needs browser diagnostics and its own certificate trust.
+
 ## Sessions and failures
 
 Android remembers a random, revocable 256-bit session key in encrypted

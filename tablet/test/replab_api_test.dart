@@ -177,7 +177,13 @@ void main() {
       await expectLater(
         api.saveSettings('Synthetic', '', ''),
         throwsA(
-          isA<ApiException>().having((e) => e.uncertain, 'uncertain', isTrue),
+          isA<ApiException>()
+              .having((e) => e.uncertain, 'uncertain', isTrue)
+              .having(
+                (e) => e.message,
+                'timeout message',
+                contains('did not respond in time'),
+              ),
         ),
       );
     },
