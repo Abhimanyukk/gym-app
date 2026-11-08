@@ -9,12 +9,12 @@ service on the private Compose network.
 The deployable server now lives separately in **`backend/`**. It includes
 Rust/Axum, PostgreSQL, embedded SQL migrations, admin authentication, the enforced
 single-admin limit, password-only enrollment, remembered sessions, gym settings,
-and member registration/list/detail APIs with photos, plans and payment receipts.
+and member registration/list/detail APIs with photos, customizable plans and payment receipts.
 See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testing,
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
 or Docker. Do not deploy this workspace's Flutter development container.
-Backend 0.4.1 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
+Backend 0.5.0 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
 address. Use a stable hostname (for this Pi, `lovin.local`) and a matching HTTPS
 certificate so the app is not tied to changing DHCP IPs. The backend guide covers
 the safe upgrade and one-time hostname/certificate setup; mDNS reachability must
@@ -117,7 +117,8 @@ totals from the header. Reduced-motion settings disable the animation.
 Members shows a searchable, membership-filtered directory with clickable profiles
 and a four-step Add member wizard: basic details, mandatory camera photo, plan
 and optional add-ons, then full Cash/UPI payment with manual staff confirmation.
-Address and emergency phone are required. Silver/Gold support 1/3/6/12 months;
+Address and emergency phone are required. Plans and duration prices come from
+the saved server catalogue; Silver/Gold initially support 1/3/6/12 months.
 personal training and insurance have independently selectable durations up to
 the plan duration. UPI QR includes the exact total for `8943521009@yescred`
 (RepLab Fitness). Scanning is not payment confirmation; staff must verify receipt.
@@ -128,13 +129,20 @@ Validated additions are preview-only, remain when changing sidebar sections, and
 disappear on refresh/hot restart. The authenticated app loads and registers real
 records through the Rust API, uses server pagination/search and fetches full
 profiles by UUID. The camera photo is a profile image, not attendance-terminal
-biometric enrollment. Real registration requires backend **0.4.0 / schema 3**;
+biometric enrollment. Customizable plans require backend **0.5.0 / schema 4**;
 see the safe Pi upgrade instructions in `backend/README.md`. Debug fixtures
 disable the payment QR and simulate confirmation without collecting money.
 
 Settings includes single-admin server authentication, password changes,
 gym/contact details and honest terminal/backup availability indicators.
 Advanced settings contains host/IP changes and optional biometric unlock.
+**Settings → Manage plans** opens the plan editor without adding another sidebar
+destination or password. Add or rename plans, edit their descriptions and
+full-payment duration prices (1–120 months), archive/reactivate plans, and change
+personal-training/insurance monthly rates. Edits remain a draft until **Save
+changes** publishes them to PostgreSQL. Existing memberships and receipts keep
+their original plan details and amounts. Conflicting or uncertain saves require
+reloading the server catalogue before editing again.
 The app remembers an encrypted session key, never the server password.
 Preview settings reset on restart; preview password forms discard their inputs
 and cannot create usable credentials or change any tablet PIN.

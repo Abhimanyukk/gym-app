@@ -228,6 +228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             padding: const EdgeInsets.all(32),
                             api: widget.api,
                             members: _members,
+                            previewPlans: _settings.plans,
                             showSampleData: kDebugMode && widget.showSampleData,
                           ),
                           _ => SettingsPage(

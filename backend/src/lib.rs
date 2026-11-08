@@ -4,6 +4,7 @@ pub mod db;
 pub mod enrollment;
 pub mod error;
 pub mod models;
+pub mod plans;
 pub mod security;
 pub mod services;
 

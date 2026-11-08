@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'member_enrollment.dart';
+
 typedef PreviewAdmin = ({String name, String email});
 
 // dover-gain-efficient: preview identities/preferences only, not authentication.
@@ -22,6 +24,9 @@ class SettingsPreview {
   String phone = '';
   String address = '';
   String serverUrl = '';
+  EnrollmentOptions plans = EnrollmentOptions.fromJson(
+    EnrollmentOptions.previewData,
+  );
 
   String? adminEmailError(String? value) {
     if (!enabled) return 'Admin management requires the backend.';

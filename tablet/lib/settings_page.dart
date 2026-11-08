@@ -4,6 +4,7 @@ import 'package:local_auth/local_auth.dart';
 
 import 'app_loading.dart';
 import 'device_session.dart';
+import 'plans_page.dart';
 import 'replab_api.dart';
 import 'server_host_fields.dart';
 import 'settings_preview.dart';
@@ -28,6 +29,7 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   bool _loading = false;
   bool _signingOut = false;
+  bool _managingPlans = false;
   final _scroll = ScrollController();
   String? _error;
   @override
@@ -141,6 +143,14 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_managingPlans) {
+      return PlansPage(
+        preview: widget.preview,
+        api: widget.api,
+        padding: widget.padding,
+        onClose: () => setState(() => _managingPlans = false),
+      );
+    }
     final theme = Theme.of(context);
     final available = widget.api != null || widget.preview.enabled;
     final panels = [
@@ -173,6 +183,22 @@ class _SettingsPageState extends State<SettingsPage> {
               label: const Text('Sign out'),
             ),
           ],
+        ],
+      ),
+      _SettingsPanel(
+        title: 'Membership plans',
+        icon: Icons.fitness_center_rounded,
+        children: [
+          const Text(
+            'Create plans, customize duration prices and monthly add-ons. Existing memberships and payment receipts keep their original details.',
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            key: const ValueKey('settings-manage-plans'),
+            onPressed: () => setState(() => _managingPlans = true),
+            icon: const Icon(Icons.tune_rounded),
+            label: const Text('Manage plans'),
+          ),
         ],
       ),
       _SettingsPanel(

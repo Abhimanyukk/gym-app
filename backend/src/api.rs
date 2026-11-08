@@ -2,7 +2,7 @@ use crate::{
     AppState, enrollment,
     error::{ApiError, Result},
     models::*,
-    services,
+    plans, services,
 };
 use axum::{
     Json, Router,
@@ -57,6 +57,12 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         .route("/api/v1/settings", get(settings).put(update_settings))
         .route("/api/v1/members", get(members).post(add_member))
         .route("/api/v1/enrollment-options", get(enrollment_options))
+        .route(
+            "/api/v1/plans",
+            get(plan_catalog)
+                .put(update_plans)
+                .layer(DefaultBodyLimit::max(128 * 1024)),
+        )
         .route(
             "/api/v1/members/enroll",
             post(enroll_member).layer(DefaultBodyLimit::max(3 * 1024 * 1024)),
@@ -180,14 +186,14 @@ async fn ready(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
     let versions: Vec<i16> = sqlx::query_scalar("SELECT version FROM replab_schema")
         .fetch_all(&state.pool)
         .await?;
-    if versions != vec![3] {
+    if versions != vec![4] {
         return Err(ApiError::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "schema_not_ready",
             "Run the database migration.",
         ));
     }
-    Ok(Json(json!({"status":"ready","database":"ok","schema":"3"})))
+    Ok(Json(json!({"status":"ready","database":"ok","schema":"4"})))
 }
 async fn login(
     State(state): State<Arc<AppState>>,
@@ -294,7 +300,26 @@ async fn enrollment_options(
     headers: HeaderMap,
 ) -> Result<Json<Value>> {
     services::authenticate(&state, &headers).await?;
-    Ok(Json(enrollment::options()))
+    Ok(Json(plans::load(&state).await?.response(true)?))
+}
+async fn plan_catalog(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> Result<Json<Value>> {
+    services::authenticate(&state, &headers).await?;
+    Ok(Json(plans::load(&state).await?.response(false)?))
+}
+async fn update_plans(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    SafeJson(input): SafeJson<plans::Catalog>,
+) -> Result<Json<Value>> {
+    let auth = services::authenticate(&state, &headers).await?;
+    Ok(Json(
+        plans::save(&state, auth.admin.id, input)
+            .await?
+            .response(false)?,
+    ))
 }
 async fn enroll_member(
     State(state): State<Arc<AppState>>,

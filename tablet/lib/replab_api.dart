@@ -67,7 +67,7 @@ class RepLabApi extends ChangeNotifier {
     clearSession();
     _base = Uri.parse(url.trim()).replace(path: '');
     final health = await request('GET', '/health/ready', authenticated: false);
-    if (health is! Map || !['2', '3'].contains(health['schema'])) {
+    if (health is! Map || !['2', '3', '4'].contains(health['schema'])) {
       throw const ApiException(
         'Update the gym server to RepLab 0.3 and run its migration before setting up this app.',
         code: 'server_update_required',
@@ -307,6 +307,28 @@ class RepLabApi extends ChangeNotifier {
       rethrow;
     }
   }
+
+  Future<EnrollmentOptions> plans() async {
+    try {
+      return EnrollmentOptions.fromJson(
+        await request('GET', '/api/v1/plans') as Map<String, dynamic>,
+      );
+    } on ApiException catch (error) {
+      if (error.code == 'not_found') {
+        throw const ApiException(
+          'Update the gym server to RepLab 0.5 and run its migration to manage plans.',
+          code: 'server_update_required',
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<EnrollmentOptions> savePlans(Map<String, dynamic> fields) async =>
+      EnrollmentOptions.fromJson(
+        await request('PUT', '/api/v1/plans', body: fields)
+            as Map<String, dynamic>,
+      );
 
   Future<MemberProfile> enrollMember(Map<String, dynamic> fields) async =>
       MemberProfile.fromJson(

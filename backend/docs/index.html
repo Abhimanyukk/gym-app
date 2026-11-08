@@ -6,7 +6,7 @@ code,pre{background:#292020;padding:4px;border-radius:4px}td,th{text-align:left;
 a{color:#a4dcab}table{width:100%}
 </style></head><body><h1>RepLab Rust API</h1>
 <p>Native server, PostgreSQL, API version <code>/api/v1</code>. This is a static reference, not Swagger.</p>
-<p>Server 0.4.1 listens on all IPv4 interfaces at <code>0.0.0.0:8443</code>,
+<p>Server 0.5.0 listens on all IPv4 interfaces at <code>0.0.0.0:8443</code>,
 independent of Wi-Fi/DHCP address. Legacy <code>API_BIND_IP</code> is ignored.
 Use a stable client hostname with a matching HTTPS certificate and an explicit
 Host allowlist; do not disable certificate verification or expose the API publicly.</p>
@@ -20,6 +20,7 @@ Host allowlist; do not disable certificate verification or expose the API public
 <tr><td>POST</td><td>/api/v1/auth/change-password</td><td>Verify current password; revoke all own sessions</td></tr>
 <tr><td>GET, POST</td><td>/api/v1/admins</td><td>Legacy account API; second-admin creation refused</td></tr>
 <tr><td>GET, PUT</td><td>/api/v1/settings</td><td>Read/replace gym settings</td></tr>
+<tr><td>GET, PUT</td><td>/api/v1/plans</td><td>Read/edit the revisioned plan catalogue</td></tr>
 <tr><td>GET, POST</td><td>/api/v1/members</td><td>Directory/legacy basic registration</td></tr>
 <tr><td>GET</td><td>/api/v1/enrollment-options</td><td>Plans, prices, add-on rates and UPI payee</td></tr>
 <tr><td>POST</td><td>/api/v1/members/enroll</td><td>Atomic member/photo/plan/full-payment registration</td></tr>
@@ -41,14 +42,43 @@ Resume has no body and returns <code>expires_at, admin</code> after verifying th
 Only key hashes are stored on the server. Sign-out revokes the current key; password changes revoke all keys.</p>
 <p>There is one administrator, no default password, and no username/email requirement.
 The executable's <code>create-admin</code> command prompts for password and confirmation only.
-HTTPS port <code>8443</code> is fixed in the app and server. Server 0.4.x requires schema <code>3</code>.</p>
+HTTPS port <code>8443</code> is fixed in the app and server. Server 0.5.0 requires schema <code>4</code>.
+Run the explicit migration after a verified backup; existing credentials, certificates,
+memberships and receipts are preserved.</p>
+<h2>Customizable plans</h2>
+<p>Settings → Manage plans edits the server catalogue. GET <code>/api/v1/plans</code>
+returns <code>revision, plans, training_monthly_paise, insurance_monthly_paise</code>,
+plus fixed UPI payee details. PUT replaces the catalogue using its last revision:</p>
+<pre>{
+  "revision": 1,
+  "plans": [
+    {"code":"silver","name":"Silver Plan","description":"Strength &amp; Fitness","active":true,
+     "prices_paise":{"1":120000,"3":320000,"6":600000,"12":1200000}},
+    {"code":"gold","name":"Gold Plan","description":"Silver + Cardio Access","active":true,
+     "prices_paise":{"1":170000,"3":470000,"6":900000,"12":1800000}}
+  ],
+  "training_monthly_paise": 500000,
+  "insurance_monthly_paise": 20000
+}</pre>
+<p>Add plans with new stable codes. Existing codes cannot be removed; set
+<code>active:false</code> to archive instead. Names are unique ignoring case.
+Limits: 64 plans, 24 duration prices per plan, durations 1–120 months,
+positive integer-paise prices up to 1,000,000,000. Add-on rates may be zero.
+Do not include UPI fields in PUT; the recipient is not editable here.</p>
+<p>Save increments the revision and records an audit atomically. A stale save gives
+<code>409 plan_catalog_changed</code>; removing an identity gives
+<code>422 plan_archive_required</code>. Reload after conflicting/uncertain saves.
+Price edits and archival never rewrite historical subscriptions or receipts.</p>
 <h2>Complete member enrollment</h2>
 <p>Fetch <code>/api/v1/enrollment-options</code> before collecting payment.
-Silver costs ₹1,200/₹3,200/₹6,000/₹12,000 and Gold ₹1,700/₹4,700/₹9,000/₹18,000
-for 1/3/6/12 calendar months. Personal training is ₹5,000/month; insurance ₹200/month.
+It returns the current revision and active plans. Initial defaults are Silver
+₹1,200/₹3,200/₹6,000/₹12,000 and Gold ₹1,700/₹4,700/₹9,000/₹18,000
+for 1/3/6/12 calendar months, training ₹5,000/month and insurance ₹200/month.
+These are editable migration seeds; use the saved catalogue, not hardcoded totals.
 UPI payee: <code>8943521009@yescred</code>, RepLab Fitness.</p>
 <pre>{
   "request_id": "00000000-0000-4000-8000-000000000001",
+  "catalog_revision": 1,
   "member": {"name":"Test Member","phone":"+91 9876543210",
              "address":"Synthetic address","emergency_phone":"+91 9876543211"},
   "photo_base64": "&lt;base64 JPEG/PNG profile photo&gt;",
@@ -58,7 +88,8 @@ UPI payee: <code>8943521009@yescred</code>, RepLab Fitness.</p>
   "payment_confirmed": true
 }</pre>
 <p>POST this to <code>/api/v1/members/enroll</code> only after staff verifies the
-full amount received. This example totals ₹10,100 (1,010,000 integer paise).
+full amount received. With the initial defaults this example totals ₹10,100
+(1,010,000 integer paise).
 Client totals are rejected. Required: address/emergency phone, photo, plan and
 explicit full-payment confirmation. Cash/UPI only; QR scanning is not bank
 verification. Add-ons have independent durations 0 through the plan duration
@@ -66,7 +97,7 @@ and start with the plan. Start date is today through 366 days ahead.
 End dates are inclusive, clamped monthly anniversary minus one day.</p>
 <p>Photos are JPEG/PNG, at most 2 MiB decoded and 1024×1024 pixels.
 The server strips metadata and stores a 512×512-or-smaller JPEG in PostgreSQL.
-The enrollment JSON limit is 3 MiB; other routes remain limited to 16 KiB.
+The enrollment JSON limit is 3 MiB, plans 128 KiB; other routes remain limited to 16 KiB.
 This is a profile photo, not a biometric template or terminal enrollment.
 Insurance selection does not issue an insurance policy.</p>
 <p>Member, photo/subscription, numbered append-only receipt and audit commit together.
@@ -76,6 +107,13 @@ to check the result. Do not collect payment again. Changed reuse of an ID gives
 <code>409 enrollment_conflict</code>; missing lookup gives <code>404 enrollment_not_found</code>.
 Full profiles contain <code>enrollment</code> and JPEG <code>photo_base64</code>
 when registered; old member records do not invent plans/payments.</p>
+<p>New registrations must include <code>catalog_revision</code>. Missing revision
+gives <code>409 app_update_required</code>, stale revision
+<code>409 plan_catalog_changed</code>, archived/unavailable plan
+<code>409 plan_unavailable</code>. These failures do not create records.
+Reload plans and reconcile any already collected payment before confirming again.
+Exact retries of completed registrations still return their original receipt
+after plan changes, including legacy requests.</p>
 <p>Error format: <code>{"error":{"code":"...","message":"..."}}</code>. Request IDs are in
 <code>X-Request-ID</code>. Login rate-limit responses include <code>Retry-After</code>.</p>
 <p>Attendance, renewals/refunds, billing reports and terminal integration are not available yet.

@@ -13,7 +13,8 @@ Changing servers requires that server's password before saving the new connectio
 old session keys are never sent to a different host.
 
 Implemented: setup, login/logout/session resumption, live dashboard member counts,
-server-paginated member search/registration/detail, gym settings and password changes.
+server-paginated member search/registration/detail, gym settings, plan management
+and password changes.
 Registration includes a profile photo, initial subscription and full-payment receipt.
 The existing theme, fixed sidebar, sticky headers and rotating-dumbbell loaders
 are retained.
@@ -26,15 +27,18 @@ Name sorting sorts the currently loaded page(s); Load more retrieves another 50.
 
 ## Add member
 
-Requires backend **0.4.0**, explicitly migrated to **schema 3**. An older server
-can still sign in, but the wizard explains that its server must be upgraded.
+Customizable plans require backend **0.5.0**, explicitly migrated to **schema 4**.
+The updated app can still sign in and register using a 0.4.x server's fixed
+catalogue, but plan management explains that the server must be upgraded.
+Update the app alongside a 0.5.0 server: older apps cannot submit new registrations
+without the catalogue revision needed to protect the displayed payment amount.
 
 1. **Basic details:** name, phone, address and emergency phone are mandatory;
    email and notes are optional.
 2. **Photo:** allow camera permission and take a clear photo with the member's
    consent. The inline camera supports switching cameras and retaking. This
    stores a profile image, not a biometric template or terminal enrollment.
-3. **Plan:** select Silver or Gold and Monthly/Quarterly/Half-yearly/Annual.
+3. **Plan:** select an active plan and one of its configured durations.
    Optionally choose personal training and insurance durations independently,
    from one month up to the selected plan duration. Add-ons start with the plan.
 4. **Payment:** collect the **full amount** in Cash or UPI. UPI displays an
@@ -42,12 +46,14 @@ can still sign in, but the wizard explains that its server must be upgraded.
    check the cash or receiving account and explicitly confirm receipt; neither
    scanning nor a customer's screenshot proves payment. A UPI reference is optional.
 
+Initial defaults, editable in **Settings → Manage plans**:
+
 | Plan | 1 month | 3 months | 6 months | 12 months |
 |---|---:|---:|---:|---:|
 | Silver — Strength & Fitness | ₹1,200 | ₹3,200 | ₹6,000 | ₹12,000 |
 | Gold — Silver + Cardio Access | ₹1,700 | ₹4,700 | ₹9,000 | ₹18,000 |
 
-Personal training costs ₹5,000/month; insurance costs ₹200/month. Insurance
+Personal training initially costs ₹5,000/month; insurance costs ₹200/month. Insurance
 selection records the add-on purchase only; it does not issue an insurance policy.
 Prices use integer paise, with totals validated by the server. A calendar-month
 subscription ends on the clamped monthly anniversary **minus one day**, inclusive.
@@ -62,10 +68,37 @@ dialog stays open; after an app restart, check the directory before registering
 again. Profiles show the saved photo, plan dates, add-on durations and receipt.
 Legacy members honestly show no registered plan/payment instead of invented data.
 
+If plans change before registration commits, the server rejects the stale
+catalogue instead of silently charging another amount. The wizard retains basic
+details/photo and returns to plan selection. Reload plans, reconcile any payment
+already received against the new total, and confirm again. Exact retries of an
+already completed registration still return its original receipt after price edits.
+
 The camera requests no microphone access. Native camera permission and UPI scans
 still need checking on the actual tablet/phone. Browser camera preview works on
 localhost when camera access is granted. Debug sample mode has no real payment
 QR and never sends registrations to the server.
+
+## Manage plans
+
+Open **Settings → Manage plans**; the sidebar stays in place and Back returns to
+Settings. No extra login or tablet PIN is introduced. The title/actions remain
+sticky, and pull-down reload uses the shared dumbbell indicator.
+
+- Add plans, rename them and edit their access descriptions.
+- Configure each plan's full-payment prices for custom durations of **1–120 months**.
+  Amounts accept up to two decimals and are stored as integer paise.
+- Archive/reactivate plans. Archived plans cannot be selected for new registrations;
+  existing memberships and receipts keep their original details.
+- Change monthly personal-training and insurance rates.
+- **Apply to draft** changes only the editor; **Save changes** publishes the
+  whole catalogue to PostgreSQL for subsequent registrations. Back/Reload warns
+  before discarding unsaved edits.
+
+Concurrent edits or an uncertain save result block further edits until Reload
+retrieves authoritative server values. Offline management never substitutes sample
+prices. Explicit debug sample mode keeps its catalogue locally until hot restart.
+UPI recipient details remain unchanged; this page edits plans, not the receiving account.
 
 ## Local browser integration
 

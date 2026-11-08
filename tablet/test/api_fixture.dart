@@ -52,6 +52,7 @@ class ApiFixture {
   ];
   final members = <Map<String, dynamic>>[member(42)];
   final enrollments = <String, Map<String, dynamic>>{};
+  Map<String, dynamic> catalog = EnrollmentOptions.previewData;
   static Map<String, dynamic> member(int n) => {
     'id': '00000000-0000-0000-0000-${n.toString().padLeft(12, '0')}',
     'number': 'M-${n.toString().padLeft(4, '0')}',
@@ -101,7 +102,7 @@ class ApiFixture {
       });
     }
     if (path == '/health/ready') {
-      return json({'status': 'ready', 'schema': '3', 'database': 'ok'});
+      return json({'status': 'ready', 'schema': '4', 'database': 'ok'});
     }
     if (expired) return error('unauthorized', 'Authentication required.', 401);
     if (request.headers['Authorization'] != 'Bearer $sessionToken') {
@@ -126,12 +127,42 @@ class ApiFixture {
       });
     }
     if (path == '/api/v1/enrollment-options') {
-      return json(EnrollmentOptions.previewData);
+      return json({
+        ...catalog,
+        'plans': (catalog['plans'] as List)
+            .where((plan) => (plan as Map)['active'] != false)
+            .toList(),
+      });
+    }
+    if (path == '/api/v1/plans') {
+      if (request.method == 'PUT') {
+        if (body['revision'] != catalog['revision']) {
+          return error(
+            'plan_catalog_changed',
+            'Plans were changed elsewhere. Reload the catalogue before saving.',
+            409,
+          );
+        }
+        catalog = {
+          ...body,
+          'revision': (catalog['revision'] as int) + 1,
+          'upi_id': catalog['upi_id'],
+          'payee_name': catalog['payee_name'],
+        };
+      }
+      return json(catalog);
     }
     if (path == '/api/v1/members/enroll') {
       final key = body['request_id'] as String;
       if (enrollments.containsKey(key)) return json(enrollments[key]!, 201);
-      final options = EnrollmentOptions.fromJson(EnrollmentOptions.previewData);
+      if (body['catalog_revision'] != catalog['revision']) {
+        return error(
+          'plan_catalog_changed',
+          'Plans changed. Registration was not saved. Reload plans and review the amount.',
+          409,
+        );
+      }
+      final options = EnrollmentOptions.fromJson(catalog);
       final plan = options.plans.firstWhere((p) => p.code == body['plan_code']);
       final months = body['months'] as int;
       final start = DateTime.parse(body['starts_on'] as String);

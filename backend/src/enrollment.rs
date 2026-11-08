@@ -2,6 +2,7 @@ use crate::{
     AppState,
     error::{ApiError, Result},
     models::{Member, MemberInput, phone, text, today},
+    plans::Catalog,
     security, services,
 };
 use axum::http::StatusCode;
@@ -14,19 +15,6 @@ use uuid::Uuid;
 
 pub const UPI_ID: &str = "8943521009@yescred";
 pub const PAYEE_NAME: &str = "RepLab Fitness";
-
-pub fn options() -> Value {
-    json!({
-        "plans": [
-            {"code":"silver","name":"Silver Plan","description":"Strength & Fitness",
-             "prices_paise":{"1":120000,"3":320000,"6":600000,"12":1200000}},
-            {"code":"gold","name":"Gold Plan","description":"Silver + Cardio Access",
-             "prices_paise":{"1":170000,"3":470000,"6":900000,"12":1800000}}
-        ],
-        "training_monthly_paise":500000,"insurance_monthly_paise":20000,
-        "upi_id":UPI_ID,"payee_name":PAYEE_NAME
-    })
-}
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -43,20 +31,9 @@ pub struct EnrollmentInput {
     #[serde(default)]
     pub payment_reference: String,
     pub payment_confirmed: bool,
-}
-
-fn plan_price(code: &str, months: u32) -> Result<i64> {
-    Ok(match (code, months) {
-        ("silver", 1) => 120000,
-        ("silver", 3) => 320000,
-        ("silver", 6) => 600000,
-        ("silver", 12) => 1200000,
-        ("gold", 1) => 170000,
-        ("gold", 3) => 470000,
-        ("gold", 6) => 900000,
-        ("gold", 12) => 1800000,
-        _ => return Err(ApiError::validation()),
-    })
+    // Omit absent revisions when hashing legacy retries of already-saved receipts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_revision: Option<i64>,
 }
 
 pub fn end_date(start: NaiveDate, months: u32) -> Result<NaiveDate> {
@@ -66,8 +43,36 @@ pub fn end_date(start: NaiveDate, months: u32) -> Result<NaiveDate> {
         .ok_or_else(ApiError::validation)
 }
 
-fn details(input: &EnrollmentInput) -> Result<Value> {
-    let base = plan_price(&input.plan_code, input.months)?;
+fn details(input: &EnrollmentInput, catalog: &Catalog) -> Result<Value> {
+    if input.catalog_revision.is_none() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "app_update_required",
+            "Update the tablet app to use the configurable plan catalogue.",
+        ));
+    }
+    if input.catalog_revision != Some(catalog.revision) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "plan_catalog_changed",
+            "Plans changed. Registration was not saved. Reload plans and review the amount. If payment was already received, reconcile it before confirming again.",
+        ));
+    }
+    let plan = catalog
+        .plans
+        .iter()
+        .find(|plan| plan.active && plan.code == input.plan_code)
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                "plan_unavailable",
+                "This plan is no longer available. Reload plans before registering.",
+            )
+        })?;
+    let base = *plan
+        .prices_paise
+        .get(&input.months)
+        .ok_or_else(ApiError::validation)?;
     if input.training_months > input.months
         || input.insurance_months > input.months
         || input.starts_on < today()
@@ -77,11 +82,12 @@ fn details(input: &EnrollmentInput) -> Result<Value> {
     {
         return Err(ApiError::validation());
     }
-    let training = i64::from(input.training_months) * 500000;
-    let insurance = i64::from(input.insurance_months) * 20000;
+    let training = i64::from(input.training_months) * catalog.training_monthly_paise;
+    let insurance = i64::from(input.insurance_months) * catalog.insurance_monthly_paise;
     Ok(json!({
         "plan_code":input.plan_code,
-        "plan_name": if input.plan_code=="silver" {"Silver Plan"} else {"Gold Plan"},
+        "plan_name":plan.name,"plan_description":plan.description,
+        "catalog_revision":catalog.revision,
         "months":input.months,"starts_on":input.starts_on,
         "ends_on":end_date(input.starts_on,input.months)?,
         "training_months":input.training_months,"insurance_months":input.insurance_months,
@@ -165,7 +171,8 @@ pub async fn create(state: &AppState, actor: Uuid, input: EnrollmentInput) -> Re
         tx.commit().await?;
         return services::member(state, id).await;
     }
-    let mut snapshot = details(&input)?;
+    let catalog = crate::plans::for_enrollment(&mut tx).await?;
+    let mut snapshot = details(&input, &catalog)?;
     let reference = text(&input.payment_reference, 100, false)?;
     snapshot["payment_reference"] = json!(reference);
     let data = input.member.validate()?;
@@ -252,10 +259,27 @@ pub async fn lookup(state: &AppState, request_id: Uuid) -> Result<Member> {
 mod tests {
     use super::*;
     #[test]
-    fn prices_and_inclusive_dates() {
-        assert_eq!(plan_price("silver", 3).unwrap(), 320000);
-        assert_eq!(plan_price("gold", 12).unwrap(), 1800000);
-        assert!(plan_price("gold", 2).is_err());
+    fn custom_prices_and_inclusive_dates() {
+        let catalog: Catalog = serde_json::from_value(json!({
+            "revision":7,"plans":[{"code":"custom","name":"Custom Plan","description":"",
+                "active":true,"prices_paise":{"2":123456}}],
+            "training_monthly_paise":5050,"insurance_monthly_paise":2050
+        }))
+        .unwrap();
+        let mut input: EnrollmentInput = serde_json::from_value(json!({
+            "request_id":Uuid::new_v4(),"member":{"name":"Fixture","phone":"+91 9876543210"},
+            "photo_base64":"","plan_code":"custom","months":2,"starts_on":today(),
+            "training_months":1,"insurance_months":2,"payment_method":"cash",
+            "payment_confirmed":true,"catalog_revision":7
+        }))
+        .unwrap();
+        let snapshot = details(&input, &catalog).unwrap();
+        assert_eq!(snapshot["plan_name"], "Custom Plan");
+        assert_eq!(snapshot["total_paise"], 132606);
+        input.catalog_revision = Some(6);
+        assert!(details(&input, &catalog).is_err());
+        input.catalog_revision = None;
+        assert!(details(&input, &catalog).is_err());
         for (start, months, end) in [
             ("2026-11-02", 1, "2026-12-01"),
             ("2026-01-31", 1, "2026-02-27"),

@@ -17,11 +17,13 @@ class MemberRegistrationDialog extends StatefulWidget {
     required this.members,
     required this.canSave,
     this.api,
+    this.previewPlans,
     this.capturePhoto = captureMemberPhoto,
   });
   final List<MemberProfile> members;
   final bool canSave;
   final RepLabApi? api;
+  final EnrollmentOptions? previewPlans;
   final Future<Uint8List?> Function(BuildContext) capturePhoto;
   @override
   State<MemberRegistrationDialog> createState() =>
@@ -57,7 +59,15 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
     if (widget.api != null) {
       _loadOptions();
     } else if (widget.canSave) {
-      _options = EnrollmentOptions.fromJson(EnrollmentOptions.previewData);
+      final catalog =
+          widget.previewPlans?.toJson() ?? EnrollmentOptions.previewData;
+      catalog['plans'] = (catalog['plans'] as List)
+          .where((plan) => (plan as Map)['active'] != false)
+          .toList();
+      _options = EnrollmentOptions.fromJson(catalog);
+      if (_durations.isNotEmpty && !_durations.contains(_months)) {
+        _months = _durations.first;
+      }
     }
   }
 
@@ -68,7 +78,22 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
     });
     try {
       final options = await widget.api!.enrollmentOptions();
-      if (mounted) setState(() => _options = options);
+      if (mounted) {
+        setState(() {
+          _options = options;
+          final selected = options.plans.where(
+            (plan) => plan.code == _planCode,
+          );
+          if (selected.isEmpty) _planCode = null;
+          final durations = _durations;
+          if (durations.isNotEmpty && !durations.contains(_months)) {
+            _months = durations.first;
+          }
+          if (_training > _months) _training = _months;
+          if (_insurance > _months) _insurance = _months;
+          _confirmed = false;
+        });
+      }
     } on ApiException catch (error) {
       if (mounted) setState(() => _optionsError = error.message);
     } catch (_) {
@@ -98,9 +123,17 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
     super.dispose();
   }
 
-  EnrollmentPlan? get _plan => _planCode == null
+  EnrollmentPlan? get _plan => _planCode == null || _options == null
       ? null
       : _options!.plans.firstWhere((plan) => plan.code == _planCode);
+  List<int> get _durations =>
+      (_plan?.prices.keys.toList() ??
+            _options?.plans
+                .expand((plan) => plan.prices.keys)
+                .toSet()
+                .toList() ??
+            [])
+        ..sort();
   int get _base => _plan?.prices[_months] ?? 0;
   int get _total =>
       _base +
@@ -136,7 +169,7 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
       setState(() => _error = 'Take a member photo to continue.');
       return;
     }
-    if (_step == 2 && _plan == null) {
+    if (_step == 2 && (_plan == null || !_plan!.prices.containsKey(_months))) {
       setState(() => _error = 'Select a plan to continue.');
       return;
     }
@@ -183,6 +216,7 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
     'payment_method': _method,
     'payment_reference': _reference.text.trim(),
     'payment_confirmed': true,
+    if (_options!.revision != null) 'catalog_revision': _options!.revision,
   };
 
   Future<void> _save() async {
@@ -252,6 +286,17 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
         setState(() {
           _error = error.message;
           _uncertain = error.uncertain;
+          if (error.code == 'plan_catalog_changed' ||
+              error.code == 'plan_unavailable') {
+            _step = 2;
+            _optionsError = error.message;
+            _error = null;
+            _options = null;
+            _planCode = null;
+            _confirmed = false;
+            _submitted = null;
+            if (_scroll.hasClients) _scroll.jumpTo(0);
+          }
         });
       }
     } catch (_) {
@@ -463,6 +508,20 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
         ],
       );
     }
+    if (_options!.plans.isEmpty) {
+      return Column(
+        children: [
+          const Text(
+            'No active plans are available. Add or reactivate a plan in Settings → Manage plans.',
+          ),
+          if (widget.api != null)
+            TextButton(
+              onPressed: _loadOptions,
+              child: const Text('Reload plans'),
+            ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -481,43 +540,48 @@ class _MemberRegistrationDialogState extends State<MemberRegistrationDialog> {
               ),
               title: Text(plan.name),
               subtitle: Text(
-                '${plan.description}\n${rupees(plan.prices[_months]!)} for $_months ${_months == 1 ? 'month' : 'months'}',
+                '${plan.description}\n${plan.prices.containsKey(_months) ? '${rupees(plan.prices[_months]!)} for $_months ${_months == 1 ? 'month' : 'months'}' : 'From ${rupees(plan.prices.values.reduce((a, b) => a < b ? a : b))} · Select a duration'}',
               ),
               isThreeLine: true,
-              onTap: () => setState(() => _planCode = plan.code),
+              onTap: () => setState(() {
+                _planCode = plan.code;
+                if (!plan.prices.containsKey(_months)) {
+                  _months = (plan.prices.keys.toList()..sort()).first;
+                }
+                if (_training > _months) _training = _months;
+                if (_insurance > _months) _insurance = _months;
+                _confirmed = false;
+              }),
             ),
           ),
           const SizedBox(height: 8),
         ],
         const SizedBox(height: 8),
-        DropdownButtonFormField<int>(
-          key: const ValueKey('member-plan-months'),
-          initialValue: _months,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Plan duration',
-            border: OutlineInputBorder(),
-          ),
-          items: [
-            for (final entry in const [
-              (1, 'Monthly'),
-              (3, 'Quarterly'),
-              (6, 'Half-yearly'),
-              (12, 'Annual'),
-            ])
-              DropdownMenuItem(
-                value: entry.$1,
-                child: Text(
-                  '${entry.$2} · ${entry.$1} ${entry.$1 == 1 ? 'month' : 'months'}',
+        KeyedSubtree(
+          // Recreate the form state when plans offer different durations.
+          key: ValueKey('member-duration-$_planCode-$_months'),
+          child: DropdownButtonFormField<int>(
+            key: const ValueKey('member-plan-months'),
+            initialValue: _months,
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Plan duration',
+              border: OutlineInputBorder(),
+            ),
+            items: [
+              for (final months in _durations)
+                DropdownMenuItem(
+                  value: months,
+                  child: Text(planDuration(months)),
                 ),
-              ),
-          ],
-          onChanged: (value) => setState(() {
-            _months = value!;
-            if (_training > _months) _training = _months;
-            if (_insurance > _months) _insurance = _months;
-            _confirmed = false;
-          }),
+            ],
+            onChanged: (value) => setState(() {
+              _months = value!;
+              if (_training > _months) _training = _months;
+              if (_insurance > _months) _insurance = _months;
+              _confirmed = false;
+            }),
+          ),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(

@@ -132,13 +132,14 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     db::migrate(&owner).await.unwrap();
     assert_eq!(
         call(&app, "GET", "/health/ready", None, None).await.1["schema"],
-        "3"
+        "4"
     );
     for sql in [
         "CREATE TABLE should_not_exist(id integer)",
         "DELETE FROM audit_logs",
         "UPDATE audit_logs SET action='tampered'",
         "DELETE FROM admins",
+        "DELETE FROM plan_catalog",
     ] {
         assert!(sqlx::query(sql).execute(&runtime).await.is_err(), "{sql}");
     }
@@ -171,6 +172,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
         "/api/v1/auth/me",
         "/api/v1/admins",
         "/api/v1/settings",
+        "/api/v1/plans",
         "/api/v1/members",
         "/api/v1/dashboard/summary",
     ] {
@@ -552,7 +554,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
 
     // Simulate the old marker on exactly the same business schema, then adopt it.
     // Only the isolated superuser may remove the test marker; production has no reset command.
-    sqlx::raw_sql("DROP TABLE member_enrollments; DROP TABLE replab_schema; CREATE TABLE alembic_version(version_num varchar(32) PRIMARY KEY);
+    sqlx::raw_sql("DROP TABLE plan_catalog; DROP TABLE member_enrollments; DROP TABLE replab_schema; CREATE TABLE alembic_version(version_num varchar(32) PRIMARY KEY);
         ALTER TABLE alembic_version OWNER TO replab_owner;
         INSERT INTO alembic_version VALUES('unexpected');").execute(&superuser).await.unwrap();
     assert!(db::migrate(&owner).await.is_err());
@@ -576,7 +578,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
     // A schema-1 installation with multiple admins is refused atomically.
     // Only this isolated test superuser may add/remove the synthetic account.
     sqlx::raw_sql(
-        "DROP TABLE member_enrollments;
+        "DROP TABLE plan_catalog; DROP TABLE member_enrollments;
         ALTER TABLE admins DROP CONSTRAINT ck_admin_slot;
         ALTER TABLE admins ADD CONSTRAINT ck_admin_slot CHECK(slot BETWEEN 1 AND 3);
         UPDATE replab_schema SET version=1;",
@@ -638,7 +640,8 @@ async fn enrollment_contract(app: &Router, owner: &PgPool, runtime: &PgPool, tok
             "address":"Synthetic address","emergency_phone":"+91 9876543211"},
         "photo_base64":STANDARD.encode(bytes.into_inner()),"plan_code":"gold","months":3,
         "starts_on":replab_server::models::today(),"training_months":1,"insurance_months":2,
-        "payment_method":"upi","payment_reference":"SYNTHETIC-UPI-REF","payment_confirmed":true
+        "payment_method":"upi","payment_reference":"SYNTHETIC-UPI-REF","payment_confirmed":true,
+        "catalog_revision":options.1["revision"]
     });
     for (field, value) in [
         ("photo_base64", json!("not-an-image")),
@@ -803,4 +806,243 @@ async fn enrollment_contract(app: &Router, owner: &PgPool, runtime: &PgPool, tok
     ] {
         assert!(sqlx::query(sql).execute(runtime).await.is_err());
     }
+    plans_contract(app, owner, token, &body, &a.1).await;
+}
+
+async fn plans_contract(
+    app: &Router,
+    owner: &PgPool,
+    token: &str,
+    enrollment: &Value,
+    original_member: &Value,
+) {
+    let catalog = call(app, "GET", "/api/v1/plans", Some(token), None).await;
+    assert_eq!(catalog.0, StatusCode::OK);
+    assert_eq!(catalog.1["revision"], 1);
+    let mut draft = catalog.1.clone();
+    draft.as_object_mut().unwrap().remove("upi_id");
+    draft.as_object_mut().unwrap().remove("payee_name");
+    assert_eq!(
+        call(app, "PUT", "/api/v1/plans", None, Some(draft.clone()))
+            .await
+            .0,
+        StatusCode::UNAUTHORIZED,
+    );
+    for (prices, name) in [
+        (json!({"0":100}), "Invalid duration"),
+        (json!({"121":100}), "Invalid duration"),
+        (json!({"2":0}), "Zero base price"),
+        (json!({"2":-1}), "Negative price"),
+        (json!({"2":123.45}), "Floating-point price"),
+        (json!({"2":1000000001_i64}), "Excessive price"),
+        (json!({}), "Missing prices"),
+    ] {
+        let mut invalid = draft.clone();
+        invalid["plans"][0]["prices_paise"] = prices;
+        let result = call(app, "PUT", "/api/v1/plans", Some(token), Some(invalid)).await;
+        assert_eq!(
+            result.0,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{name}: {}",
+            result.1
+        );
+    }
+    let mut invalid = draft.clone();
+    invalid["plans"][1]["name"] = invalid["plans"][0]["name"].clone();
+    assert_eq!(
+        call(app, "PUT", "/api/v1/plans", Some(token), Some(invalid))
+            .await
+            .0,
+        StatusCode::UNPROCESSABLE_ENTITY,
+    );
+    let mut invalid = draft.clone();
+    invalid["plans"].as_array_mut().unwrap().remove(1);
+    assert_eq!(
+        call(app, "PUT", "/api/v1/plans", Some(token), Some(invalid))
+            .await
+            .1["error"]["code"],
+        "plan_archive_required",
+    );
+    draft["plans"][0]["name"] = json!("Strength Flex");
+    draft["plans"][0]["prices_paise"]["1"] = json!(135050);
+    draft["plans"][1]["active"] = json!(false);
+    draft["plans"].as_array_mut().unwrap().push(json!({
+        "code":"weekend","name":"Weekend Plan","description":"Custom two-month access",
+        "active":true,"prices_paise":{"2":250025}
+    }));
+    draft["training_monthly_paise"] = json!(400075);
+    draft["insurance_monthly_paise"] = json!(25010);
+    let mut concurrent = draft.clone();
+    concurrent["plans"][0]["description"] = json!("Concurrent edit");
+    let (a, b) = tokio::join!(
+        call(app, "PUT", "/api/v1/plans", Some(token), Some(draft)),
+        call(app, "PUT", "/api/v1/plans", Some(token), Some(concurrent)),
+    );
+    assert!(
+        (a.0 == StatusCode::OK && b.0 == StatusCode::CONFLICT)
+            || (b.0 == StatusCode::OK && a.0 == StatusCode::CONFLICT)
+    );
+    let saved = if a.0 == StatusCode::OK { a.1 } else { b.1 };
+    assert_eq!(saved["revision"], 2);
+    let options = call(app, "GET", "/api/v1/enrollment-options", Some(token), None)
+        .await
+        .1;
+    assert_eq!(options["plans"].as_array().unwrap().len(), 2);
+    assert_eq!(options["plans"][1]["code"], "weekend");
+    assert_eq!(options["training_monthly_paise"], 400075);
+
+    let mut next = saved.clone();
+    next.as_object_mut().unwrap().remove("upi_id");
+    next.as_object_mut().unwrap().remove("payee_name");
+    next["training_monthly_paise"] = json!(1);
+    sqlx::query("REVOKE INSERT ON audit_logs FROM replab_app")
+        .execute(owner)
+        .await
+        .unwrap();
+    let failed = call(app, "PUT", "/api/v1/plans", Some(token), Some(next)).await;
+    sqlx::query("GRANT INSERT ON audit_logs TO replab_app")
+        .execute(owner)
+        .await
+        .unwrap();
+    assert_eq!(failed.0, StatusCode::SERVICE_UNAVAILABLE);
+    db::migrate(owner).await.unwrap();
+    assert_eq!(
+        call(app, "GET", "/api/v1/plans", Some(token), None).await.1,
+        saved
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM audit_logs WHERE action='plans.update'")
+            .fetch_one(owner)
+            .await
+            .unwrap(),
+        1,
+    );
+
+    let id = original_member["id"].as_str().unwrap();
+    let historical = call(
+        app,
+        "GET",
+        &format!("/api/v1/members/{id}"),
+        Some(token),
+        None,
+    )
+    .await
+    .1;
+    assert_eq!(historical["enrollment"], original_member["enrollment"]);
+    let retried = call(
+        app,
+        "POST",
+        "/api/v1/members/enroll",
+        Some(token),
+        Some(enrollment.clone()),
+    )
+    .await;
+    assert_eq!(retried.0, StatusCode::CREATED);
+    assert_eq!(retried.1["enrollment"], original_member["enrollment"]);
+
+    let mut fresh = enrollment.clone();
+    fresh["request_id"] = json!(uuid::Uuid::new_v4());
+    fresh["member"]["name"] = json!("Custom plan member");
+    fresh["plan_code"] = json!("weekend");
+    fresh["months"] = json!(2);
+    let before: i64 = sqlx::query_scalar("SELECT count(*) FROM members")
+        .fetch_one(owner)
+        .await
+        .unwrap();
+    let stale = call(
+        app,
+        "POST",
+        "/api/v1/members/enroll",
+        Some(token),
+        Some(fresh.clone()),
+    )
+    .await;
+    assert_eq!(stale.1["error"]["code"], "plan_catalog_changed");
+    fresh["catalog_revision"] = saved["revision"].clone();
+    let mut missing_revision = fresh.clone();
+    missing_revision
+        .as_object_mut()
+        .unwrap()
+        .remove("catalog_revision");
+    assert_eq!(
+        call(
+            app,
+            "POST",
+            "/api/v1/members/enroll",
+            Some(token),
+            Some(missing_revision)
+        )
+        .await
+        .1["error"]["code"],
+        "app_update_required",
+    );
+    let mut archived = fresh.clone();
+    archived["plan_code"] = json!("gold");
+    assert_eq!(
+        call(
+            app,
+            "POST",
+            "/api/v1/members/enroll",
+            Some(token),
+            Some(archived)
+        )
+        .await
+        .1["error"]["code"],
+        "plan_unavailable",
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM members")
+            .fetch_one(owner)
+            .await
+            .unwrap(),
+        before,
+    );
+    let registered = call(
+        app,
+        "POST",
+        "/api/v1/members/enroll",
+        Some(token),
+        Some(fresh),
+    )
+    .await;
+    assert_eq!(registered.0, StatusCode::CREATED, "{}", registered.1);
+    assert_eq!(registered.1["enrollment"]["plan_name"], "Weekend Plan");
+    assert_eq!(registered.1["enrollment"]["total_paise"], 700120);
+
+    // Simulate a populated schema-3 Pi upgrade; receipts are not rewritten.
+    sqlx::raw_sql("DROP TABLE plan_catalog; UPDATE replab_schema SET version=3;")
+        .execute(owner)
+        .await
+        .unwrap();
+    db::migrate(owner).await.unwrap();
+    db::migrate(owner).await.unwrap();
+    assert_eq!(
+        call(app, "GET", "/health/ready", None, None).await.1["schema"],
+        "4"
+    );
+    assert_eq!(
+        call(
+            app,
+            "GET",
+            &format!("/api/v1/members/{id}"),
+            Some(token),
+            None
+        )
+        .await
+        .1["enrollment"],
+        original_member["enrollment"],
+    );
+    let custom_id = registered.1["id"].as_str().unwrap();
+    assert_eq!(
+        call(
+            app,
+            "GET",
+            &format!("/api/v1/members/{custom_id}"),
+            Some(token),
+            None
+        )
+        .await
+        .1["enrollment"],
+        registered.1["enrollment"],
+    );
 }

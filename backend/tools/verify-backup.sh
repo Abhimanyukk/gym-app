@@ -18,13 +18,18 @@ BEGIN
     IF (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[1]::smallint[]
        AND (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[2]::smallint[]
        AND (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[3]::smallint[]
+       AND (SELECT array_agg(version) FROM replab_schema) IS DISTINCT FROM ARRAY[4]::smallint[]
        THEN RAISE EXCEPTION 'Unknown schema'; END IF;
-    IF (SELECT version FROM replab_schema) = 3 THEN
+    IF (SELECT version FROM replab_schema) >= 3 THEN
       PERFORM count(*) FROM member_enrollments;
       IF EXISTS (SELECT 1 FROM member_enrollments
         WHERE octet_length(photo) NOT BETWEEN 1 AND 524288
           OR total_paise <> base_paise + training_paise + insurance_paise)
         THEN RAISE EXCEPTION 'Invalid restored registration'; END IF;
+    END IF;
+    IF (SELECT version FROM replab_schema) = 4 THEN
+      IF (SELECT count(*) FROM plan_catalog) <> 1
+        THEN RAISE EXCEPTION 'Missing restored plan catalogue'; END IF;
     END IF;
   ELSIF to_regclass('public.alembic_version') IS NOT NULL THEN
     IF (SELECT array_agg(version_num::text) FROM alembic_version) IS DISTINCT FROM ARRAY['0001']::text[] THEN RAISE EXCEPTION 'Unknown legacy schema'; END IF;

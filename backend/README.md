@@ -11,6 +11,7 @@ initial-admin/configuration commands. Deploy the executable and operator files,
 not Rust source, Cargo, or the Flutter toolchain. Rust is required only to build.
 The executable is Linux ARM64 and dynamically uses standard Linux system
 libraries; build against an OS compatible with the Pi, not Windows.
+Current release: **0.5.0**, database **schema 4**.
 
 ## Implemented scope
 
@@ -27,13 +28,15 @@ libraries; build against an OS compatible with the Pi, not Windows.
   IP headers are ignored. Do not add an unconfigured reverse proxy.
 - Gym settings; member registration, directory/search/pagination, full profiles.
 - Four-step tablet enrollment: required contact/address/emergency details,
-  profile photo, Silver/Gold subscription and independently timed add-ons,
+  profile photo, configurable subscription and independently timed add-ons,
   full Cash/UPI payment recorded by explicit staff confirmation.
+- Settings-based plan management: names/descriptions, custom duration prices,
+  archive/reactivate, monthly training/insurance rates, audited revision checks.
 - Server-calculated integer-paise totals, append-only numbered registration
   receipts and idempotent retries/lookup for uncertain responses.
 - Atomic mutation + audit + commit **before** success response; restricted DB
   runtime role; credentials/inputs/SQL not included in request logs.
-- HTTPS, 16-KiB JSON body limit (3 MiB for photo enrollment only),
+- HTTPS, 16-KiB JSON body limit (128 KiB for plans, 3 MiB for photo enrollment),
   32 concurrent requests, request IDs, health checks.
 - Explicit non-destructive migrations and native backup/restore-check scripts.
 
@@ -53,6 +56,62 @@ in the executable and app. `API_PORT` and `API_BIND_IP` entries in old configura
 are ignored in v0.4.1. HTTPS listens on **all IPv4 interfaces (`0.0.0.0:8443`)**;
 development HTTP always stays on `127.0.0.1:8443`. Only allowed hosts/origins, certificate paths and database
 connection settings remain configurable.
+
+## Upgrade an existing v0.4.1 Pi to v0.5.0
+
+Use `build/replab-linux-arm64-v0.5.0.tar.gz` and its SHA-256 sidecar. Transfer both,
+verify their digests, and extract into a **new** directory:
+
+```sh
+cd ~
+sha256sum replab-linux-arm64-v0.5.0.tar.gz
+cat replab-linux-arm64-v0.5.0.tar.gz.sha256
+# Continue only if the digests match.
+mkdir ~/replab-release-v0.5.0
+tar -xzf replab-linux-arm64-v0.5.0.tar.gz -C ~/replab-release-v0.5.0
+cd ~/replab-release-v0.5.0
+./replab-server --version
+ldd ./replab-server
+```
+
+After confirming that the new executable runs, stop writes and create a
+restore-verified backup. Do not proceed if verification fails:
+
+```sh
+sudo test ! -e /opt/replab/replab-server-pre-v0.5.0
+sudo systemctl stop replab
+sudo sh /opt/replab/tools/backup.sh "/var/backups/replab/pre-v0.5.0-$(date +%Y%m%d-%H%M%S).dump" --verify
+```
+
+Copy that verified backup off the Pi. Then install and explicitly migrate:
+
+```sh
+sudo cp -an /opt/replab/replab-server /opt/replab/replab-server-pre-v0.5.0
+sudo install -o root -g root -m 755 ./replab-server /opt/replab/replab-server
+sudo cp -r tools /opt/replab/
+sudo /opt/replab/replab-server --env-file /etc/replab/owner.env migrate
+sudo systemctl reset-failed replab
+sudo systemctl start replab
+# Use the active TLS_CERT_PATH and a host already in ALLOWED_HOSTS:
+sudo curl --cacert /etc/replab/hostname-v0.4.1/server.crt https://lovin.local:8443/health/ready
+```
+
+Expected readiness: `{"status":"ready","database":"ok","schema":"4"}`.
+If your active certificate is elsewhere, substitute its path. This upgrade
+does **not** regenerate certificates/configuration, initialize the database,
+create another admin or change session keys. Keep existing environment files
+and the hostname allowlist intact.
+
+Migration 4 adds one saved catalogue seeded with the original Silver/Gold prices
+and add-on rates. Existing members, photos, subscriptions and receipts are not
+rewritten. **Install the updated tablet app** before new registrations: server
+0.5.0 requires a catalogue revision to prevent silently accepting payment at an
+outdated price. Use **Settings → Manage plans** to publish catalogue changes.
+
+Keep the old executable and verified pre-upgrade backup. Replacing the executable
+alone is **not** a rollback: 0.4.x will not report ready on schema 4. A downgrade
+requires a deliberate restore of the verified schema-3 backup into a new database;
+see Recovery below. Never reset the live database to solve an upgrade failure.
 
 ## Network-independent startup — v0.4.1
 
@@ -255,7 +314,7 @@ rules in `pg_hba.conf`; do not add LAN-wide `trust` rules or expose port 5432.
 
 ## 2. Obtain the executable-only deployment package
 
-After a build here, `build/replab-linux-arm64-v0.4.1.tar.gz` contains:
+After a build here, `build/replab-linux-arm64-v0.5.0.tar.gz` contains:
 
 - `replab-server`
 - `deploy/replab.service`
@@ -269,7 +328,7 @@ From Windows PowerShell in `backend/`, replace the SSH user/hostname (or use
 the currently reachable IP just for transferring the package):
 
 ```powershell
-scp build/replab-linux-arm64-v0.4.1.tar.gz build/replab-linux-arm64-v0.4.1.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_HOST:~/
+scp build/replab-linux-arm64-v0.5.0.tar.gz build/replab-linux-arm64-v0.5.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_HOST:~/
 ```
 
 On the Pi:
@@ -277,10 +336,10 @@ On the Pi:
 ```sh
 cd ~
 # The sidecar's recorded path may include build/; compare the digest explicitly:
-sha256sum replab-linux-arm64-v0.4.1.tar.gz
-cat replab-linux-arm64-v0.4.1.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.5.0.tar.gz
+cat replab-linux-arm64-v0.5.0.tar.gz.sha256
 mkdir -p ~/replab-release
-tar -xzf replab-linux-arm64-v0.4.1.tar.gz -C ~/replab-release
+tar -xzf replab-linux-arm64-v0.5.0.tar.gz -C ~/replab-release
 cd ~/replab-release
 ./replab-server --version
 ldd ./replab-server
@@ -294,7 +353,7 @@ and the committed lockfile:
 
 ```sh
 cargo build --locked --release
-sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.4.1.tar.gz
+sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.5.0.tar.gz
 ```
 
 Compilers/source may be on a build machine; they are not production prerequisites.
@@ -350,7 +409,7 @@ Use `sudo` for this check: `/etc/replab` is restricted to root and the `replab`
 group, so an ordinary login user cannot read the certificate through it.
 Keep the directory, private key, and environment-file permissions unchanged.
 
-Expected readiness: `{"status":"ready","database":"ok","schema":"3"}`.
+Expected readiness: `{"status":"ready","database":"ok","schema":"4"}`.
 The service starts after boot, restarts failures, runs as non-root `replab`,
 and has a read-only application filesystem and 512-MiB memory cap.
 Migrations are manual operator actions, never automatic API startup resets.
@@ -382,6 +441,7 @@ All `/api/v1` routes except login require `Authorization: Bearer <access_token>`
 | POST | `/api/v1/auth/change-password` | Verify current password, revoke all own sessions |
 | GET, POST | `/api/v1/admins` | Legacy account API; second-admin creation refused |
 | GET, PUT | `/api/v1/settings` | Read/replace gym preferences |
+| GET, PUT | `/api/v1/plans` | Read/edit the revisioned plan catalogue |
 | GET, POST | `/api/v1/members` | Searchable directory/legacy basic registration |
 | GET | `/api/v1/enrollment-options` | Plans, integer-paise prices, add-ons, UPI payee |
 | POST | `/api/v1/members/enroll` | Atomic member/photo/subscription/full-payment registration |
@@ -401,12 +461,49 @@ Optional fields: `email`, `address`, `emergency_phone`, `notes`, `joined`,
 `is_active`. Joining date defaults to today's IST date and cannot be future.
 This does not create subscriptions, payments or biometric data.
 
-### Complete enrollment (v0.4)
+### Customizable plans (v0.5)
+
+`GET /api/v1/plans` returns all active/archived plans, the current `revision`,
+monthly add-on rates, and fixed UPI payee details. `PUT /api/v1/plans` replaces
+the catalogue using the last revision read:
+
+```json
+{
+  "revision": 1,
+  "plans": [
+    {"code":"silver","name":"Silver Plan","description":"Strength & Fitness","active":true,
+     "prices_paise":{"1":120000,"3":320000,"6":600000,"12":1200000}},
+    {"code":"gold","name":"Gold Plan","description":"Silver + Cardio Access","active":true,
+     "prices_paise":{"1":170000,"3":470000,"6":900000,"12":1800000}},
+    {"code":"flex","name":"Flex Plan","description":"Custom access","active":true,
+     "prices_paise":{"2":250025,"5":600000}}
+  ],
+  "training_monthly_paise":500000,
+  "insurance_monthly_paise":20000
+}
+```
+
+Existing plan codes are stable identities: include them even when archived;
+removing one gives `422 plan_archive_required`. Names must be unique ignoring
+case. Limit: 64 plans, 24 duration prices per plan, 1–120 months per duration.
+Prices are positive integer paise up to 1,000,000,000; add-on rates may be zero.
+The 128-KiB catalogue request limit applies. UPI fields are returned by GET but
+cannot be changed through PUT.
+
+Successful save increments `revision` and audits before/after values atomically.
+A stale revision gives `409 plan_catalog_changed`; reload before editing again.
+After an uncertain save, read the authoritative catalogue before retrying.
+Catalogue updates apply to **future registrations only**: saved subscriptions
+and receipts preserve their original plan/price snapshots.
+
+### Complete enrollment (v0.5)
 
 Read the authenticated catalogue from `/api/v1/enrollment-options` before
-collecting payment. It supplies Silver prices ₹1,200/₹3,200/₹6,000/₹12,000
+collecting payment. It supplies the current revision, active plans and prices.
+Initial defaults are Silver prices ₹1,200/₹3,200/₹6,000/₹12,000
 and Gold ₹1,700/₹4,700/₹9,000/₹18,000 for 1/3/6/12 calendar months.
-Personal training is ₹5,000/month; insurance ₹200/month.
+Personal training initially is ₹5,000/month; insurance ₹200/month.
+These are migration seeds, not permanent prices; the saved catalogue is authoritative.
 UPI payee is `8943521009@yescred`, **RepLab Fitness**.
 
 `POST /api/v1/members/enroll`:
@@ -414,6 +511,7 @@ UPI payee is `8943521009@yescred`, **RepLab Fitness**.
 ```json
 {
   "request_id": "00000000-0000-4000-8000-000000000001",
+  "catalog_revision": 1,
   "member": {
     "name": "Test Member",
     "phone": "+91 9876543210",
@@ -433,9 +531,10 @@ UPI payee is `8943521009@yescred`, **RepLab Fitness**.
 ```
 
 Generate a fresh UUID per registration; reuse its exact payload/ID for retries.
-The server computes ₹10,100 / 1,010,000 paise for this combination. Client totals
+With the initial defaults, the server computes ₹10,100 / 1,010,000 paise for this combination. Client totals
 are not accepted. Address/emergency phone, valid photo, selected plan/duration
 and explicit full-payment confirmation are required. Only Cash/UPI are supported.
+Plan duration must be one of that active plan's saved prices.
 Add-on durations are 0 (not included) through the plan duration, independently.
 Start date is today through 366 days ahead and cannot precede the joining date.
 Add-ons share the plan start. End dates are inclusive: clamped calendar-month
@@ -460,6 +559,14 @@ returns `409 enrollment_conflict`. Lookup returns the full saved member or
 `404 enrollment_not_found`. On timeout, check or retry the same registration
 without collecting payment again. Draft/retry state is retained only in the
 open tablet dialog, not across app restarts; check records after a restart.
+
+New registrations require `catalog_revision` from enrollment options. A missing
+revision gives `409 app_update_required`; changed prices give
+`409 plan_catalog_changed`; an archived/unavailable plan gives
+`409 plan_unavailable`. No member or receipt is created for these failures.
+Reload plans and reconcile any already collected payment before confirming again.
+Identical retries of saved registrations are checked first and retain their
+original response even after catalogue edits, including legacy pre-v0.5 requests.
 
 Directory: `q` (name/phone/exact M-0001 number), `active` (record status),
 `limit` (1–100, default 50), `offset` (nonnegative). Results contain `items`,
@@ -585,6 +692,9 @@ identities, name validation, permissions and overwrite refusal.
 Enrollment checks cover catalogue/prices, required contact/photo/full-payment
 validation, large-photo body limits, atomic rollback, concurrent duplicate
 submissions, conflicting retries, JPEG normalization and append-only receipts.
+Plan checks cover custom prices/durations, validation, authorization, concurrent
+revision conflicts, audit rollback, archival, stale registration rejection,
+unchanged historical receipts/retries and a populated schema-3 upgrade.
 
 Cross-build on Debian Bookworm with Rust's ARM64 target and cross-GCC:
 
@@ -593,7 +703,7 @@ rustup target add aarch64-unknown-linux-gnu
 sudo apt install gcc-aarch64-linux-gnu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
   cargo build --locked --release --target aarch64-unknown-linux-gnu
-sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.4.1.tar.gz
+sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.5.0.tar.gz
 ```
 
 ## Existing Python-era PostgreSQL databases

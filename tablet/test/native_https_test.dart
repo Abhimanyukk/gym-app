@@ -37,7 +37,7 @@ void main() {
         authenticated: false,
       );
       expect(ready, containsPair('database', 'ok'));
-      expect(ready, containsPair('schema', '3'));
+      expect(ready, containsPair('schema', '4'));
       expect(api.signedIn, isFalse);
     },
     skip: url.isEmpty

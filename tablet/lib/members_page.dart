@@ -16,12 +16,14 @@ class MembersPage extends StatefulWidget {
     required this.members,
     this.showSampleData = false,
     this.api,
+    this.previewPlans,
     this.padding = EdgeInsets.zero,
   });
 
   final List<MemberProfile> members;
   final bool showSampleData;
   final RepLabApi? api;
+  final EnrollmentOptions? previewPlans;
   final EdgeInsets padding;
 
   @override
@@ -107,6 +109,7 @@ class _MembersPageState extends State<MembersPage> {
       context: context,
       barrierDismissible: false,
       builder: (_) => MemberRegistrationDialog(
+        previewPlans: widget.previewPlans,
         members: widget.members,
         canSave: _isPreview || widget.api != null,
         api: widget.api,

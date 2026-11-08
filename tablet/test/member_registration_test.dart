@@ -308,6 +308,55 @@ void main() {
     api.clearSession();
   });
 
+  testWidgets('changed prices require reload and fresh payment confirmation', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fixture = ApiFixture();
+    final api = RepLabApi(client: fixture.client);
+    addTearDown(api.dispose);
+    await api.login('https://localhost:8443', 'synthetic');
+    await open(tester, api: api);
+    await basic(tester);
+    await tap(tester, 'member-take-photo');
+    await tap(tester, 'member-add-next');
+    await tap(tester, 'member-plan-silver');
+    await tap(tester, 'member-add-next');
+    expect(find.text('Full payment: ₹1,200'), findsOneWidget);
+    await tap(tester, 'member-payment-confirm');
+
+    fixture.catalog['revision'] = 2;
+    (fixture.catalog['plans'] as List).first['prices_paise']['1'] = 135050;
+    await tap(tester, 'member-add-save');
+    expect(find.textContaining('Plans changed'), findsOneWidget);
+    expect(fixture.enrollments, isEmpty);
+    await tester.tap(find.text('Reload plans'));
+    await tester.pumpAndSettle();
+    await tap(tester, 'member-plan-silver');
+    await tap(tester, 'member-add-next');
+    expect(find.text('Full payment: ₹1,350.50'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.byKey(const ValueKey('member-add-save')))
+          .onPressed,
+      isNull,
+    );
+    await tap(tester, 'member-payment-confirm');
+    await tap(tester, 'member-add-save');
+    expect(fixture.enrollments, hasLength(1));
+    final requests = fixture.requests
+        .where((r) => r.url.path == '/api/v1/members/enroll')
+        .map((r) => jsonDecode(r.body) as Map)
+        .toList();
+    expect(requests.map((r) => r['catalog_revision']), [1, 2]);
+    expect(requests.last['member'], requests.first['member']);
+    expect(requests.last['photo_base64'], requests.first['photo_base64']);
+    expect(requests.last['request_id'], requests.first['request_id']);
+    expect(tester.takeException(), isNull);
+    api.clearSession();
+  });
+
   testWidgets('each registration step fits narrow and large-text layouts', (
     tester,
   ) async {
