@@ -428,8 +428,13 @@ pub async fn members(state: &AppState, query: MemberQuery) -> Result<Value> {
         .bind(serial)
         .fetch_one(&mut *tx)
         .await?;
+    // Join only the requested page's saved photos, not one detail request per
+    // member. PostgreSQL wraps base64; remove newlines for the Dart decoder.
     let items: Vec<Member> = sqlx::query_as(&format!(
-        "{MEMBER_SELECT} {clause} ORDER BY serial LIMIT $5 OFFSET $6"
+        "SELECT listed.*, replace(encode(enrollment.photo,'base64'), E'\\n', '') AS photo_base64
+         FROM ({MEMBER_SELECT} {clause} ORDER BY serial LIMIT $5 OFFSET $6) listed
+         LEFT JOIN member_enrollments enrollment ON enrollment.member_id=listed.id
+         ORDER BY listed.serial"
     ))
     .bind(query.active)
     .bind(&q)

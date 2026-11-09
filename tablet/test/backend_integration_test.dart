@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -53,6 +54,58 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('0 of 3 admin slots used'), findsNothing);
     expect(find.textContaining('Cannot reach the server'), findsOneWidget);
+    api.clearSession();
+  });
+
+  testWidgets('member names use saved photos in the directory and profile', (
+    tester,
+  ) async {
+    final (fixture, api) = await signIn(tester);
+    final photo = (await tester.runAsync(registrationPhoto))!;
+    fixture.members.first['photo_base64'] = base64Encode(photo);
+    fixture.members.add({...ApiFixture.member(43), 'name': 'Legacy Member'});
+    await tester.tap(find.byKey(const ValueKey('nav-Members')));
+    await tester.pumpAndSettle();
+
+    Finder avatarIn(Finder container) =>
+        find.descendant(of: container, matching: find.byType(CircleAvatar));
+    final saved = find.byKey(const ValueKey('member-M-0042'));
+    final avatar = tester.widget<CircleAvatar>(avatarIn(saved));
+    expect((avatar.backgroundImage! as MemoryImage).bytes, photo);
+    expect(avatar.child, isNull);
+    final legacy = tester.widget<CircleAvatar>(
+      avatarIn(find.byKey(const ValueKey('member-M-0043'))),
+    );
+    expect(legacy.backgroundImage, isNull);
+    expect((legacy.child! as Text).data, 'LM');
+    expect(
+      fixture.requests.where((r) => r.url.path.startsWith('/api/v1/members/')),
+      isEmpty,
+    );
+
+    await tester.tap(saved);
+    await tester.pumpAndSettle();
+    final profileAvatar = tester.widget<CircleAvatar>(
+      avatarIn(find.byKey(const ValueKey('member-details'))),
+    );
+    expect((profileAvatar.backgroundImage! as MemoryImage).bytes, photo);
+    expect(profileAvatar.child, isNull);
+    await tester.tap(find.byKey(const ValueKey('member-details-close')));
+    await tester.pumpAndSettle();
+
+    fixture.failReads = true;
+    await tester.drag(
+      find.byKey(const ValueKey('members-list')),
+      const Offset(0, 500),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      (tester.widget<CircleAvatar>(avatarIn(saved)).backgroundImage!
+              as MemoryImage)
+          .bytes,
+      photo,
+    );
+    expect(tester.takeException(), isNull);
     api.clearSession();
   });
 

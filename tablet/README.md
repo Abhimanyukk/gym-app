@@ -25,6 +25,11 @@ Attendance refresh checks server readiness but does not claim to retrieve visits
 Active/inactive member **record** filters are not subscription-status filters.
 Name sorting sorts the currently loaded page(s); Load more retrieves another 50.
 
+Member names in the directory and profile use the saved registration photo.
+Backend **0.6.2** includes photos in the paginated directory response, avoiding
+extra requests per member. Older records without a photo keep initials as a
+fallback. This server fix works with the existing APK.
+
 ## Dashboard cards
 
 Backend **0.6.1** supplies the dashboard totals in one authenticated summary request:

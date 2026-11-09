@@ -13,7 +13,7 @@ import unittest
 SOURCE = Path("/source")
 WORK = Path("/tmp/replab-package-test")
 STATE = WORK / "state.json"
-PACKAGE = SOURCE / "build/replab-server_0.6.1-1_arm64.deb"
+PACKAGE = SOURCE / "build/replab-server_0.6.2-1_arm64.deb"
 APP = Path("/opt/replab/replab-server")
 RUNTIME = Path("/etc/replab/runtime.env")
 OWNER = Path("/etc/replab/owner.env")
@@ -66,7 +66,7 @@ if cmd == "runuser":
         print("t" if s["database"] or s["roles"] else "f")
     quit()
 if cmd == "replab-server":
-    if args == ["--version"]: print("replab-server 0.6.1")
+    if args == ["--version"]: print("replab-server 0.6.2")
     elif args[0] == "configure":
         directory = pathlib.Path("/etc/replab")
         common = "POSTGRES_HOST=127.0.0.1\nPOSTGRES_PORT=5432\nPOSTGRES_DB=replab\n"

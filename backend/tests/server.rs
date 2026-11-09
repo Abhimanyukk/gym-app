@@ -952,6 +952,22 @@ async fn enrollment_contract(app: &Router, owner: &PgPool, runtime: &PgPool, tok
         .decode(a.1["photo_base64"].as_str().unwrap())
         .unwrap();
     assert_eq!(&photo[..2], &[255, 216]); // Re-encoded JPEG, not submitted PNG/metadata.
+    let directory = call(
+        app,
+        "GET",
+        "/api/v1/members?q=Enrolled&limit=1",
+        Some(token),
+        None,
+    )
+    .await;
+    assert_eq!(directory.0, StatusCode::OK, "{}", directory.1);
+    assert_eq!(directory.1["total"], 1);
+    assert_eq!(directory.1["items"][0]["id"], a.1["id"]);
+    assert_eq!(directory.1["items"][0]["photo_base64"], a.1["photo_base64"]);
+    let legacy = call(app, "GET", "/api/v1/members?q=Alice", Some(token), None).await;
+    assert_eq!(legacy.0, StatusCode::OK, "{}", legacy.1);
+    assert_eq!(legacy.1["total"], 1);
+    assert!(legacy.1["items"][0].get("photo_base64").is_none());
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM members")
             .fetch_one(owner)

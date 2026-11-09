@@ -14,12 +14,12 @@ See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testin
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
 or Docker. Do not deploy this workspace's Flutter development container.
-The preferred Pi installer is **`backend/build/replab-server_0.6.1-1_arm64.deb`**:
-copy it to the Pi and run `sudo apt install ./replab-server_0.6.1-1_arm64.deb`.
+The preferred Pi installer is **`backend/build/replab-server_0.6.2-1_arm64.deb`**:
+copy it to the Pi and run `sudo apt install ./replab-server_0.6.2-1_arm64.deb`.
 It handles host dependencies, verified upgrade backups, migration and service
 startup without resetting credentials or certificates. A fresh Pi additionally
 runs `sudo replab-setup` once to choose its admin password; see the backend guide.
-Backend 0.6.1 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
+Backend 0.6.2 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
 address. Use a stable hostname (for this Pi, `lovin.local`) and a matching HTTPS
 certificate so the app is not tied to changing DHCP IPs. The backend guide covers
 the safe upgrade and one-time hostname/certificate setup; mDNS reachability must
