@@ -353,12 +353,5 @@ async fn enrollment_lookup(
 }
 async fn dashboard(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Result<Json<Value>> {
     services::authenticate(&state, &headers).await?;
-    let (total, active): (i64, i64) =
-        sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE is_active) FROM members")
-            .fetch_one(&state.pool)
-            .await?;
-    Ok(Json(
-        json!({"total_members":total,"active_member_records":active,"timezone":"Asia/Kolkata",
-        "present_today":null,"active_plans":null,"revenue_today":null,"attendance_connected":false,"billing_available":false}),
-    ))
+    Ok(Json(services::dashboard(&state).await?))
 }

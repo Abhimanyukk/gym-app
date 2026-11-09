@@ -18,6 +18,35 @@ pub struct Auth {
     pub token_hash: String,
 }
 
+pub async fn dashboard(state: &AppState) -> Result<Value> {
+    let day = today();
+    let mut tx = state.pool.begin().await?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    let (total, active): (i64, i64) =
+        sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE is_active) FROM members")
+            .fetch_one(&mut *tx)
+            .await?;
+    let (revision, data): (i64, Value) =
+        sqlx::query_as("SELECT revision,data FROM plan_catalog WHERE id=1")
+            .fetch_one(&mut *tx)
+            .await?;
+    let catalog = crate::plans::Catalog::from_row(revision, data)?;
+    let active_plans = catalog.plans.iter().filter(|plan| plan.active).count();
+    // The same receipt/date calculation as Reports; never amortize prepaid
+    // subscriptions or reinterpret collections as earned revenue.
+    let collections = crate::reports::totals(&mut tx, day, day).await?;
+    tx.commit().await?;
+    Ok(json!({
+        "total_members":total,"active_member_records":active,"timezone":"Asia/Kolkata",
+        "active_plans":active_plans,"collections_today_paise":collections.total_paise,
+        "collections_date":day,"collections_available":true,
+        "present_today":null,"revenue_today":null,
+        "attendance_connected":false,"billing_available":false
+    }))
+}
+
 pub async fn authenticate(state: &AppState, headers: &HeaderMap) -> Result<Auth> {
     let token = headers
         .get("authorization")

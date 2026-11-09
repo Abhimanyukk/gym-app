@@ -353,6 +353,12 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
         .1;
     assert_eq!(dashboard["total_members"], 2);
     assert_eq!(dashboard["active_member_records"], 1);
+    assert_eq!(dashboard["active_plans"], 2);
+    assert_eq!(dashboard["collections_today_paise"], 0);
+    assert_eq!(
+        dashboard["collections_date"],
+        json!(replab_server::models::today())
+    );
     assert!(dashboard["present_today"].is_null());
     assert!(dashboard["revenue_today"].is_null());
 
@@ -739,6 +745,22 @@ async fn reports_contract(app: &Router, owner: &PgPool, token: &str) {
     .unwrap();
     assert_eq!(history["highlights"]["all_time"]["total_paise"], expected);
     assert_eq!(history["totals"]["total_paise"], expected);
+    let dashboard = call(app, "GET", "/api/v1/dashboard/summary", Some(token), None)
+        .await
+        .1;
+    assert_eq!(
+        dashboard["collections_today_paise"],
+        history["highlights"]["today"]["total_paise"]
+    );
+    let expected_today: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(total_paise),0)::bigint FROM member_enrollments
+         WHERE (received_at AT TIME ZONE 'Asia/Kolkata')::date=$1",
+    )
+    .bind(replab_server::models::today())
+    .fetch_one(owner)
+    .await
+    .unwrap();
+    assert_eq!(dashboard["collections_today_paise"], expected_today);
     for query in [
         "from=2024-03-01&to=2024-02-28",
         "from=not-a-date",
@@ -762,6 +784,23 @@ async fn reports_contract(app: &Router, owner: &PgPool, token: &str) {
             "{query}"
         );
     }
+    let mut catalog = call(app, "GET", "/api/v1/plans", Some(token), None).await.1;
+    catalog.as_object_mut().unwrap().remove("upi_id");
+    catalog.as_object_mut().unwrap().remove("payee_name");
+    for plan in catalog["plans"].as_array_mut().unwrap() {
+        plan["active"] = json!(false);
+    }
+    assert_eq!(
+        call(app, "PUT", "/api/v1/plans", Some(token), Some(catalog))
+            .await
+            .0,
+        StatusCode::OK,
+    );
+    let archived = call(app, "GET", "/api/v1/dashboard/summary", Some(token), None)
+        .await
+        .1;
+    assert_eq!(archived["active_plans"], 0);
+    assert_eq!(archived["collections_today_paise"], expected_today);
 }
 
 async fn enrollment_contract(app: &Router, owner: &PgPool, runtime: &PgPool, token: &str) {
@@ -1040,6 +1079,13 @@ async fn plans_contract(
     assert_eq!(options["plans"].as_array().unwrap().len(), 2);
     assert_eq!(options["plans"][1]["code"], "weekend");
     assert_eq!(options["training_monthly_paise"], 400075);
+    assert_eq!(
+        call(app, "GET", "/api/v1/dashboard/summary", Some(token), None)
+            .await
+            .1["active_plans"],
+        2,
+        "Archived Gold must not count alongside active Silver and Weekend",
+    );
 
     let mut next = saved.clone();
     next.as_object_mut().unwrap().remove("upi_id");

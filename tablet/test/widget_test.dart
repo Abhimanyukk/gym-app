@@ -540,7 +540,7 @@ void main() {
         'Total Members',
         'Present Today',
         'Active Plans',
-        'Revenue (Today)',
+        'Collections (Today)',
       ];
 
       for (final (size, scale, columns) in const [
@@ -577,7 +577,7 @@ void main() {
         );
         expect(clock.data, contains('${today.year}'));
         expect(clock.data, endsWith('IST'));
-        for (final value in ['178', '30', '3', '\$12,346']) {
+        for (final value in ['178', '30', '3', '₹12,346']) {
           expect(find.text(value), findsOneWidget);
         }
         for (final text in [

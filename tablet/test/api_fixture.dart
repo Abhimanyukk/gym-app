@@ -57,6 +57,7 @@ class ApiFixture {
   Map<String, dynamic> catalog = EnrollmentOptions.previewData;
   bool reportsAvailable = true;
   Map<String, dynamic>? reportResponse;
+  Map<String, dynamic>? dashboardResponse;
   static Map<String, dynamic> member(int n) => {
     'id': '00000000-0000-0000-0000-${n.toString().padLeft(12, '0')}',
     'number': 'M-${n.toString().padLeft(4, '0')}',
@@ -215,13 +216,22 @@ class ApiFixture {
           : json(value);
     }
     if (path == '/api/v1/dashboard/summary') {
-      return json({
-        'total_members': members.length,
-        'active_member_records': members.length,
-        'present_today': null,
-        'active_plans': null,
-        'revenue_today': null,
-      });
+      final report = reportResponse ?? reportsFixture();
+      return json(
+        dashboardResponse ??
+            {
+              'total_members': members.length,
+              'active_member_records': members.length,
+              'present_today': null,
+              'active_plans': (catalog['plans'] as List)
+                  .where((p) => p['active'] != false)
+                  .length,
+              'collections_today_paise':
+                  report['highlights']?['today']?['total_paise'],
+              'collections_date': report['today'],
+              'revenue_today': null,
+            },
+      );
     }
     if (path == '/api/v1/admins') {
       if (request.method == 'POST') {

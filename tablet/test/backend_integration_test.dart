@@ -8,6 +8,7 @@ import 'package:gym_management_app/replab_api.dart';
 
 import 'api_fixture.dart';
 import 'registration_fixture.dart';
+import 'reports_fixture.dart';
 
 void main() {
   const device = MethodChannel('plugins.flutter.io/local_auth');
@@ -54,6 +55,77 @@ void main() {
     expect(find.textContaining('Cannot reach the server'), findsOneWidget);
     api.clearSession();
   });
+
+  testWidgets(
+    'dashboard refresh wires catalogue plans and Reports collections, preserving unavailable states',
+    (tester) async {
+      final (fixture, api) = await signIn(tester);
+      String? value(String field) => tester
+          .widget<Text>(find.byKey(ValueKey('dashboard-value-$field')))
+          .data;
+      Future<void> refresh() async {
+        await tester.drag(
+          find.byKey(const PageStorageKey('Dashboard')),
+          const Offset(0, 500),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      expect(value('active_plans'), '2');
+      expect(value('collections_today_paise'), '₹100.01');
+      (fixture.catalog['plans'] as List)[1]['active'] = false;
+      fixture.reportResponse = reportsFixture();
+      fixture.reportResponse!['highlights']['today'] = {
+        'total_paise': 123456,
+        'cash_paise': 123456,
+        'upi_paise': 0,
+        'base_paise': 123456,
+        'training_paise': 0,
+        'insurance_paise': 0,
+        'receipt_count': 1,
+      };
+      final calls = fixture.requests
+          .where((r) => r.url.path == '/api/v1/dashboard/summary')
+          .length;
+      await refresh();
+      expect(value('active_plans'), '1');
+      expect(value('collections_today_paise'), '₹1,234.56');
+      expect(
+        fixture.requests
+            .where((r) => r.url.path == '/api/v1/dashboard/summary')
+            .length,
+        calls + 1,
+      );
+      fixture.failReads = true;
+      await refresh();
+      expect(value('active_plans'), '1');
+      expect(value('collections_today_paise'), '₹1,234.56');
+      expect(find.textContaining('Previously loaded totals'), findsOneWidget);
+      fixture.failReads = false;
+      fixture.dashboardResponse = {
+        'total_members': 2,
+        'active_member_records': 2,
+        'present_today': null,
+        'active_plans': null,
+        'revenue_today': null,
+      };
+      await refresh();
+      expect(value('active_plans'), '—');
+      expect(value('collections_today_paise'), '—');
+      expect(
+        find.textContaining('Update the gym server to 0.6.1'),
+        findsOneWidget,
+      );
+      fixture.dashboardResponse!['active_plans'] = 0;
+      fixture.dashboardResponse!['collections_today_paise'] = 0;
+      await refresh();
+      expect(value('active_plans'), '0');
+      expect(value('collections_today_paise'), '₹0');
+      expect(value('present_today'), '—');
+      expect(tester.takeException(), isNull);
+      api.clearSession();
+    },
+  );
 
   testWidgets(
     'pending writes prevent duplicate submissions and Android back dismissal',
@@ -130,7 +202,25 @@ void main() {
       );
       expect(find.text('1'), findsOneWidget);
       expect(find.text('178'), findsNothing);
-      expect(find.text('—'), findsNWidgets(3));
+      expect(find.text('—'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('dashboard-value-active_plans')),
+            )
+            .data,
+        '2',
+      );
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(
+                const ValueKey('dashboard-value-collections_today_paise'),
+              ),
+            )
+            .data,
+        '₹100.01',
+      );
       await tester.tap(find.byKey(const ValueKey('nav-Members')));
       await tester.pumpAndSettle();
       expect(find.text('1 of 1 members'), findsOneWidget);
@@ -173,7 +263,14 @@ void main() {
       expect(find.text('2 of 2 members'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('nav-Dashboard')));
       await tester.pumpAndSettle();
-      expect(find.text('2'), findsOneWidget);
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(const ValueKey('dashboard-value-total_members')),
+            )
+            .data,
+        '2',
+      );
       expect(tester.takeException(), isNull);
       api.clearSession();
     },

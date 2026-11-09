@@ -68,7 +68,7 @@ impl Catalog {
         Ok(self)
     }
 
-    fn from_row(revision: i64, mut data: Value) -> Result<Self> {
+    pub(crate) fn from_row(revision: i64, mut data: Value) -> Result<Self> {
         data["revision"] = json!(revision);
         let catalog: Self = serde_json::from_value(data).map_err(|_| ApiError::internal())?;
         catalog.validate().map_err(|_| ApiError::internal())

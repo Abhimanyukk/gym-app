@@ -38,8 +38,8 @@ impl ReportQuery {
 }
 
 #[derive(Serialize, FromRow)]
-struct Totals {
-    total_paise: i64,
+pub(crate) struct Totals {
+    pub(crate) total_paise: i64,
     cash_paise: i64,
     upi_paise: i64,
     base_paise: i64,
@@ -48,7 +48,7 @@ struct Totals {
     receipt_count: i64,
 }
 
-async fn totals(
+pub(crate) async fn totals(
     tx: &mut Transaction<'_, Postgres>,
     from: NaiveDate,
     to: NaiveDate,

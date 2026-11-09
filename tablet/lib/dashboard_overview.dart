@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'sample_attendance.dart';
+import 'member_enrollment.dart';
 
 class DashboardOverview extends StatelessWidget {
   const DashboardOverview({
@@ -19,11 +20,22 @@ class DashboardOverview extends StatelessWidget {
   // dover-gain-efficient: reference data is only enabled by the debug preview;
   // do not invent live totals, attendance, staff identity, or revenue calculations.
   static const _metrics = [
-    (title: 'Total Members', value: '178'),
-    (title: 'Present Today', value: '30'),
-    (title: 'Active Plans', value: '3'),
-    (title: 'Revenue (Today)', value: '\$12,346'),
+    (title: 'Total Members', value: '178', field: 'total_members'),
+    (title: 'Present Today', value: '30', field: 'present_today'),
+    (title: 'Active Plans', value: '3', field: 'active_plans'),
+    (
+      title: 'Collections (Today)',
+      value: '₹12,346',
+      field: 'collections_today_paise',
+    ),
   ];
+
+  String _metricValue(String field) {
+    final value = summary?[field];
+    if (value is! int || value < 0) return '—';
+    return field == 'collections_today_paise' ? rupees(value) : '$value';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -78,10 +90,8 @@ class DashboardOverview extends StatelessWidget {
                             Text(
                               showSampleData
                                   ? metric.value
-                                  : metric.title == 'Total Members' &&
-                                        summary != null
-                                  ? '${summary!['total_members']}'
-                                  : '—',
+                                  : _metricValue(metric.field),
+                              key: ValueKey('dashboard-value-${metric.field}'),
                               style: theme.textTheme.headlineMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
                               ),
@@ -162,7 +172,7 @@ class DashboardOverview extends StatelessWidget {
               showSampleData
                   ? 'Sample data · Backend and staff authorization are not connected.'
                   : summary != null
-                  ? '${summary!['active_member_records']} active member records · Attendance, plans and billing are not implemented on the server.'
+                  ? '${summary!['active_member_records']} active member records · Active Plans counts enabled catalogue plans. Collections are payments received today (IST), not earned revenue or profit. Attendance is not connected.${summary?['active_plans'] is! int || summary?['collections_today_paise'] is! int ? ' Update the gym server to 0.6.1 for dashboard plan and collection totals.' : ''}'
                   : 'Backend and staff authorization are not connected. Totals are unavailable.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

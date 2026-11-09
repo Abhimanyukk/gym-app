@@ -13,7 +13,7 @@ Changing servers requires that server's password before saving the new connectio
 old session keys are never sent to a different host.
 
 Implemented: setup, login/logout/session resumption, live dashboard member counts,
-server-paginated member search/registration/detail, gym settings, plan management
+enabled-plan and today's collection totals, server-paginated member search/registration/detail, gym settings, plan management
 and password changes, plus financial collection reports.
 Registration includes a profile photo, initial subscription and full-payment receipt.
 The existing theme, fixed sidebar, sticky headers and rotating-dumbbell loaders
@@ -24,6 +24,19 @@ Their unavailable states remain explicit; live sessions never load sample record
 Attendance refresh checks server readiness but does not claim to retrieve visits.
 Active/inactive member **record** filters are not subscription-status filters.
 Name sorting sorts the currently loaded page(s); Load more retrieves another 50.
+
+## Dashboard cards
+
+Backend **0.6.1** supplies the dashboard totals in one authenticated summary request:
+**Active Plans** counts enabled, non-archived catalogue options (not members'
+subscriptions); **Collections (Today)** shows Cash/UPI payments received today
+in IST, including add-ons, using the same calculation as Reports.
+Amounts use exact integer paise with INR formatting. The former Revenue card
+was relabelled because receipts are collections, not earned revenue/profit.
+Pull-down refresh or returning to Dashboard reloads the figures. Failed refreshes
+retain explicitly marked prior values; older servers show dashes plus an upgrade
+notice rather than substituting zeros. Attendance stays unavailable until the
+terminal integration exists.
 
 ## Reports
 
