@@ -14,16 +14,41 @@ old session keys are never sent to a different host.
 
 Implemented: setup, login/logout/session resumption, live dashboard member counts,
 server-paginated member search/registration/detail, gym settings, plan management
-and password changes.
+and password changes, plus financial collection reports.
 Registration includes a profile photo, initial subscription and full-payment receipt.
 The existing theme, fixed sidebar, sticky headers and rotating-dumbbell loaders
 are retained.
 
-Attendance, subscription renewals/refunds, billing reports and backup status do not have API endpoints.
+Attendance, subscription renewals/refunds, expenses and backup status do not have API endpoints.
 Their unavailable states remain explicit; live sessions never load sample records.
 Attendance refresh checks server readiness but does not claim to retrieve visits.
 Active/inactive member **record** filters are not subscription-status filters.
 Name sorting sorts the currently loaded page(s); Load more retrieves another 50.
+
+## Reports
+
+Open **Reports** in the fixed sidebar. Backend **0.6.0** (schema **4**) is
+required; an older server shows an upgrade warning, never invented totals.
+
+- Today, Yesterday, This month and All-time collection cards.
+- Today/Yesterday/Last 7 days/This month/All time/custom date-range filters.
+- Selected-period totals, Cash/UPI and membership/training/insurance breakdowns.
+- Collections by the historical plan names recorded on receipts (including
+  archived plans and add-ons).
+- Daily history, newest first, with zero-collection days and independent paging.
+- Payment history; tap a receipt to see member, amount, plan, method, IST timestamp
+  and optional payment reference.
+
+The heading/date filters stay sticky and body-wide pull-down refresh uses the
+same single rotating dumbbell. Failed refreshes explicitly mark previously loaded
+figures; changing ranges removes the old range's totals. Money uses integer paise.
+The Reports icon uses Flutter's built-in bar chart because no report SVG exists.
+
+**Definition:** full registration payments manually confirmed by staff, grouped
+by the receipt's received date in **Asia/Kolkata**. This is money collected,
+not bank-verified settlement, earned revenue or profit. Prepaid annual memberships
+are counted on the payment date; expenses, refunds and old payments never entered
+in the database are not included. No synthetic income appears in an offline app.
 
 ## Add member
 

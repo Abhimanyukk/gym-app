@@ -8,6 +8,7 @@ import 'attendance_page.dart';
 import 'dashboard_overview.dart';
 import 'member_profile.dart';
 import 'members_page.dart';
+import 'reports_page.dart';
 import 'settings_page.dart';
 import 'settings_preview.dart';
 import 'replab_api.dart';
@@ -35,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     (title: 'Dashboard', icon: 'assets/icons/dashboard.svg', message: ''),
     (title: 'Attendance', icon: 'assets/icons/attendance.svg', message: ''),
     (title: 'Members', icon: 'assets/icons/members.svg', message: ''),
+    (title: 'Reports', icon: '', message: ''),
     (title: 'Settings', icon: 'assets/icons/settings.svg', message: ''),
   ];
 
@@ -87,12 +89,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       body: LayoutBuilder(
         builder: (context, constraints) {
-          // Keep all four buttons reachable without scrolling on short displays.
+          // Keep all five buttons reachable without scrolling on short displays.
+          final usableHeight =
+              constraints.maxHeight - MediaQuery.paddingOf(context).vertical;
+          final tileHeight =
+              (20 * MediaQuery.textScalerOf(context).scale(1) + 36).clamp(
+                64.0,
+                double.infinity,
+              );
           final compactHeight =
-              constraints.maxHeight - MediaQuery.paddingOf(context).vertical <
-              392;
+              usableHeight <
+              112 + _sections.length * tileHeight + 8 * (_sections.length - 1);
           final extended = constraints.maxWidth >= 800 && !compactHeight;
           final sidebarWidth = extended ? 256.0 : 80.0;
+          final smallLogo = compactHeight && usableHeight < 320;
 
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -110,19 +120,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         Padding(
                           padding: extended
                               ? const EdgeInsets.all(24)
-                              : const EdgeInsets.symmetric(vertical: 16),
+                              : EdgeInsets.symmetric(
+                                  vertical: smallLogo ? 4 : 16,
+                                ),
                           child: Align(
                             alignment: extended
                                 ? Alignment.centerLeft
                                 : Alignment.center,
                             child: CircleAvatar(
                               key: const ValueKey('sidebar-logo'),
-                              radius: extended ? 32 : 24,
+                              radius: extended
+                                  ? 32
+                                  : smallLogo
+                                  ? 16
+                                  : 24,
                               backgroundColor: _sidebarHighlight,
                               child: SvgPicture.asset(
                                 'assets/icons/dumbell.svg',
-                                width: extended ? 44 : 32,
-                                height: extended ? 44 : 32,
+                                width: extended
+                                    ? 44
+                                    : smallLogo
+                                    ? 24
+                                    : 32,
+                                height: extended
+                                    ? 44
+                                    : smallLogo
+                                    ? 24
+                                    : 32,
                                 colorFilter: const ColorFilter.mode(
                                   Colors.white,
                                   BlendMode.srcIn,
@@ -151,15 +175,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       key: ValueKey('nav-icon-${item.title}'),
                                       dimension: 24,
                                       child: Center(
-                                        child: SvgPicture.asset(
-                                          item.icon,
-                                          width: 24,
-                                          height: 24,
-                                          colorFilter: const ColorFilter.mode(
-                                            Colors.white,
-                                            BlendMode.srcIn,
-                                          ),
-                                        ),
+                                        child: item.title == 'Reports'
+                                            ? const Icon(
+                                                Icons.bar_chart_rounded,
+                                                size: 24,
+                                                color: Colors.white,
+                                              )
+                                            : SvgPicture.asset(
+                                                item.icon,
+                                                width: 24,
+                                                height: 24,
+                                                colorFilter:
+                                                    const ColorFilter.mode(
+                                                      Colors.white,
+                                                      BlendMode.srcIn,
+                                                    ),
+                                              ),
                                       ),
                                     );
                                     return Tooltip(
@@ -189,7 +220,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         ),
                                         leading: extended ? icon : null,
                                         title: extended
-                                            ? Text(item.title)
+                                            ? Text(
+                                                item.title,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              )
                                             : Center(child: icon),
                                         onTap: () {
                                           setState(
@@ -230,6 +265,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             members: _members,
                             previewPlans: _settings.plans,
                             showSampleData: kDebugMode && widget.showSampleData,
+                          ),
+                          3 => ReportsPage(
+                            padding: const EdgeInsets.all(32),
+                            api: widget.api,
                           ),
                           _ => SettingsPage(
                             padding: const EdgeInsets.all(32),

@@ -5,6 +5,7 @@ pub mod enrollment;
 pub mod error;
 pub mod models;
 pub mod plans;
+pub mod reports;
 pub mod security;
 pub mod services;
 

@@ -6,7 +6,7 @@ code,pre{background:#292020;padding:4px;border-radius:4px}td,th{text-align:left;
 a{color:#a4dcab}table{width:100%}
 </style></head><body><h1>RepLab Rust API</h1>
 <p>Native server, PostgreSQL, API version <code>/api/v1</code>. This is a static reference, not Swagger.</p>
-<p>Server 0.5.0 listens on all IPv4 interfaces at <code>0.0.0.0:8443</code>,
+<p>Server 0.6.0 listens on all IPv4 interfaces at <code>0.0.0.0:8443</code>,
 independent of Wi-Fi/DHCP address. Legacy <code>API_BIND_IP</code> is ignored.
 Use a stable client hostname with a matching HTTPS certificate and an explicit
 Host allowlist; do not disable certificate verification or expose the API publicly.</p>
@@ -26,7 +26,8 @@ Host allowlist; do not disable certificate verification or expose the API public
 <tr><td>POST</td><td>/api/v1/members/enroll</td><td>Atomic member/photo/plan/full-payment registration</td></tr>
 <tr><td>GET</td><td>/api/v1/enrollments/{request_id}</td><td>Recover saved registration after uncertain response</td></tr>
 <tr><td>GET</td><td>/api/v1/members/{uuid}</td><td>Full profile with registered photo/receipt</td></tr>
-<tr><td>GET</td><td>/api/v1/dashboard/summary</td><td>Real registered-member counts</td></tr></table>
+<tr><td>GET</td><td>/api/v1/dashboard/summary</td><td>Real registered-member counts</td></tr>
+<tr><td>GET</td><td>/api/v1/reports/collections</td><td>Financial collection totals, daily history and receipts</td></tr></table>
 <h2>Request bodies</h2>
 <pre>Login: {"password":"your password"}
 Password change: {"current_password":"...","new_password":"15+ characters"}
@@ -42,9 +43,30 @@ Resume has no body and returns <code>expires_at, admin</code> after verifying th
 Only key hashes are stored on the server. Sign-out revokes the current key; password changes revoke all keys.</p>
 <p>There is one administrator, no default password, and no username/email requirement.
 The executable's <code>create-admin</code> command prompts for password and confirmation only.
-HTTPS port <code>8443</code> is fixed in the app and server. Server 0.5.0 requires schema <code>4</code>.
+HTTPS port <code>8443</code> is fixed in the app and server. Server 0.6.0 requires schema <code>4</code>.
 Run the explicit migration after a verified backup; existing credentials, certificates,
 memberships and receipts are preserved.</p>
+<h2>Financial reports</h2>
+<p>GET <code>/api/v1/reports/collections?from=2026-11-01&amp;to=2026-11-09</code>
+returns INR integer-paise <code>totals</code>, <code>highlights</code> (today,
+yesterday, month-to-date, all-time), zero-filled <code>daily</code> collections,
+<code>plans</code> and numbered <code>receipts</code>. Dates are inclusive
+Asia/Kolkata calendar dates based on the immutable receipt <code>received_at</code>,
+not member joining/subscription dates. Omit <code>from</code> for all recorded
+history and <code>to</code> for today. Explicit dates must be 2000-01-01 through
+today, with from no later than to.</p>
+<p>Daily history pages contain 14 days; receipt pages contain 20 payments.
+Use independent nonnegative <code>daily_offset</code> and
+<code>receipt_offset</code> (maximum 1,000,000). Each page includes
+<code>items, total, limit, offset</code>. Summaries cover the entire selected
+period, not only the loaded pages. Every response uses one read-only
+repeatable-read database snapshot. Future-dated receipts are excluded.</p>
+<p>Totals split Cash/UPI and membership/personal-training/insurance. Plan groups
+use names/codes saved on receipts, including archived/renamed plans; their
+collections include add-ons. This is staff-confirmed money collected, not
+bank settlement verification, earned revenue or profit. Expenses, refunds
+and old payments never recorded in this database are not included.
+No new tables/migration are needed beyond schema 4.</p>
 <h2>Customizable plans</h2>
 <p>Settings → Manage plans edits the server catalogue. GET <code>/api/v1/plans</code>
 returns <code>revision, plans, training_monthly_paise, insurance_monthly_paise</code>,

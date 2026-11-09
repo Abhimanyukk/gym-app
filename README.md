@@ -14,12 +14,12 @@ See **`backend/README.md`** for Raspberry Pi deployment on microSD, local testin
 HTTPS, native systemd services, backups/restore checks, and the later SSD move.
 Production requires the compiled Linux ARM64 executable, not Rust/Python source
 or Docker. Do not deploy this workspace's Flutter development container.
-The preferred Pi installer is **`backend/build/replab-server_0.5.0-1_arm64.deb`**:
-copy it to the Pi and run `sudo apt install ./replab-server_0.5.0-1_arm64.deb`.
+The preferred Pi installer is **`backend/build/replab-server_0.6.0-1_arm64.deb`**:
+copy it to the Pi and run `sudo apt install ./replab-server_0.6.0-1_arm64.deb`.
 It handles host dependencies, verified upgrade backups, migration and service
 startup without resetting credentials or certificates. A fresh Pi additionally
 runs `sudo replab-setup` once to choose its admin password; see the backend guide.
-Backend 0.5.0 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
+Backend 0.6.0 listens on all IPv4 interfaces and starts without an assigned Wi-Fi
 address. Use a stable hostname (for this Pi, `lovin.local`) and a matching HTTPS
 certificate so the app is not tied to changing DHCP IPs. The backend guide covers
 the safe upgrade and one-time hostname/certificate setup; mDNS reachability must
@@ -73,11 +73,15 @@ recreating the preview container to use the separate fictional UI fixtures.
 The dashboard contains the greeting, a live gym-local clock (IST), four
 summary cards, and recent check-ins with membership status badges. Only
 the debug preview enables the clearly labelled reference sample data.
-The normal app loads real member counts from the Rust API. Attendance and
-revenue reporting remain unavailable because those backend features are not implemented;
-it does not invent totals or use preview records in an authenticated session.
+The normal app loads real member counts from the Rust API. **Reports** in the
+sidebar shows actual registration collections: today/yesterday/month/all-time,
+date filters, daily history, Cash/UPI and plan/add-on splits, and payment receipts.
+These are staff-confirmed collections, not earned revenue/profit; expenses,
+refunds and unrecorded historical payments are not included. Reports requires
+backend 0.6.0 with the existing schema 4. Physical attendance remains unavailable;
+authenticated sessions never invent totals or use preview records.
 
-Pull down at the top of Dashboard, Attendance, Members, or Settings to refresh,
+Pull down at the top of Dashboard, Attendance, Members, Reports, or Settings to refresh,
 including empty and filtered lists. The gesture also works over headings,
 search/filter controls, summary cards and page padding; the sidebar never
 refreshes. The indicator appears at the same inset above every page,

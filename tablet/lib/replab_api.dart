@@ -256,6 +256,34 @@ class RepLabApi extends ChangeNotifier {
 
   Future<Map<String, dynamic>> dashboard() async =>
       await request('GET', '/api/v1/dashboard/summary') as Map<String, dynamic>;
+  Future<Map<String, dynamic>> collections({
+    DateTime? from,
+    DateTime? to,
+    int dailyOffset = 0,
+    int receiptOffset = 0,
+  }) async {
+    try {
+      return await request(
+        'GET',
+        '/api/v1/reports/collections',
+        query: {
+          if (from != null) 'from': isoDate(from),
+          if (to != null) 'to': isoDate(to),
+          'daily_offset': '$dailyOffset',
+          'receipt_offset': '$receiptOffset',
+        },
+      ) as Map<String, dynamic>;
+    } on ApiException catch (error) {
+      if (error.code == 'not_found') {
+        throw const ApiException(
+          'Update the gym server to RepLab 0.6 to view financial reports. Existing records are unchanged.',
+          code: 'server_update_required',
+        );
+      }
+      rethrow;
+    }
+  }
+
   Future<void> ready() async {
     await request('GET', '/health/ready');
   }

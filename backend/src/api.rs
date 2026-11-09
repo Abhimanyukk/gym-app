@@ -2,7 +2,7 @@ use crate::{
     AppState, enrollment,
     error::{ApiError, Result},
     models::*,
-    plans, services,
+    plans, reports, services,
 };
 use axum::{
     Json, Router,
@@ -70,6 +70,7 @@ pub fn router(state: Arc<AppState>) -> anyhow::Result<Router> {
         .route("/api/v1/enrollments/{request_id}", get(enrollment_lookup))
         .route("/api/v1/members/{member_id}", get(member))
         .route("/api/v1/dashboard/summary", get(dashboard))
+        .route("/api/v1/reports/collections", get(collections))
         .fallback(|| async {
             ApiError::new(StatusCode::NOT_FOUND, "not_found", "Route not found.")
         })
@@ -181,6 +182,15 @@ where
 
 async fn live() -> Json<Value> {
     Json(json!({"status":"ok","service":"replab","version":env!("CARGO_PKG_VERSION")}))
+}
+async fn collections(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    query: std::result::Result<Query<reports::ReportQuery>, QueryRejection>,
+) -> Result<Json<Value>> {
+    services::authenticate(&state, &headers).await?;
+    let Query(query) = query.map_err(|_| ApiError::validation())?;
+    Ok(Json(reports::load(&state.pool, query).await?))
 }
 async fn ready(State(state): State<Arc<AppState>>) -> Result<Json<Value>> {
     let versions: Vec<i16> = sqlx::query_scalar("SELECT version FROM replab_schema")

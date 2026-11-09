@@ -175,6 +175,7 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
         "/api/v1/plans",
         "/api/v1/members",
         "/api/v1/dashboard/summary",
+        "/api/v1/reports/collections",
     ] {
         assert_eq!(
             call(&app, "GET", path, None, None).await.0,
@@ -609,9 +610,158 @@ async fn postgres_api_contract_security_and_legacy_adoption() {
         .unwrap();
     db::migrate(&owner).await.unwrap();
     enrollment_contract(&restarted, &owner, &runtime, &token).await;
+    reports_contract(&restarted, &owner, &token).await;
     println!(
         "PostgreSQL API, permissions, validation, audit rollback, session/rate persistence and legacy adoption passed."
     );
+}
+
+async fn reports_contract(app: &Router, owner: &PgPool, token: &str) {
+    // Synthetic receipts straddle midnight IST and a leap-day boundary. A
+    // future-dated fixture must not leak into Today's/All-time collections.
+    for (timestamp, method, base, training, insurance) in [
+        (
+            "2024-02-28T18:29:59Z".to_owned(),
+            "cash",
+            120001_i64,
+            0_i64,
+            0_i64,
+        ),
+        (
+            "2024-02-28T18:30:00Z".to_owned(),
+            "upi",
+            100099,
+            50000,
+            20000,
+        ),
+        (
+            (chrono::Utc::now() + chrono::Days::new(2)).to_rfc3339(),
+            "cash",
+            999999,
+            0,
+            0,
+        ),
+    ] {
+        let member = uuid::Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO members(id,name,phone,email,address,emergency_phone,notes,joined,is_active)
+             VALUES($1,'Report fixture','+91 9876543210','','','','','2024-02-28',true)",
+        )
+        .bind(member)
+        .execute(owner)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO member_enrollments(id,member_id,request_hash,photo,details,base_paise,
+                training_paise,insurance_paise,total_paise,payment_method,payment_reference,confirmed_by,received_at)
+             SELECT $1,$2,request_hash,photo,
+                details || jsonb_build_object('plan_code','archived-fixture','plan_name','Historical Plan','months',12),
+                $3,$4,$5,$3+$4+$5,$6,'REPORT-FIXTURE',confirmed_by,$7
+             FROM member_enrollments ORDER BY invoice_serial LIMIT 1",
+        ).bind(uuid::Uuid::new_v4()).bind(member).bind(base).bind(training).bind(insurance)
+            .bind(method).bind(timestamp.parse::<chrono::DateTime<chrono::Utc>>().unwrap())
+            .execute(owner).await.unwrap();
+    }
+    let path = "/api/v1/reports/collections?from=2024-02-28&to=2024-03-01";
+    let (status, report) = call(app, "GET", path, Some(token), None).await;
+    assert_eq!(status, StatusCode::OK, "{report}");
+    assert_eq!(report["currency"], "INR");
+    assert_eq!(report["timezone"], "Asia/Kolkata");
+    assert_eq!(report["totals"]["total_paise"], 290100);
+    assert_eq!(report["totals"]["cash_paise"], 120001);
+    assert_eq!(report["totals"]["upi_paise"], 170099);
+    assert_eq!(report["totals"]["base_paise"], 220100);
+    assert_eq!(report["totals"]["training_paise"], 50000);
+    assert_eq!(report["totals"]["insurance_paise"], 20000);
+    assert_eq!(report["totals"]["receipt_count"], 2);
+    assert_eq!(report["daily"]["total"], 3);
+    assert_eq!(report["daily"]["items"][0]["date"], "2024-03-01");
+    assert_eq!(report["daily"]["items"][0]["total_paise"], 0);
+    assert_eq!(report["daily"]["items"][1]["date"], "2024-02-29");
+    assert_eq!(report["daily"]["items"][1]["total_paise"], 170099);
+    assert_eq!(report["daily"]["items"][2]["total_paise"], 120001);
+    assert_eq!(report["plans"][0]["name"], "Historical Plan");
+    assert_eq!(report["plans"][0]["total_paise"], 290100);
+    assert_eq!(report["receipts"]["total"], 2);
+    assert_eq!(
+        report["receipts"]["items"][0]["payment_reference"],
+        "REPORT-FIXTURE"
+    );
+    assert!(
+        report["receipts"]["items"][0]["invoice_number"]
+            .as_str()
+            .unwrap()
+            .starts_with("RL-")
+    );
+    assert!(
+        report["receipts"]["items"][0]["member_number"]
+            .as_str()
+            .unwrap()
+            .starts_with("M-")
+    );
+    assert!(!report.to_string().contains("photo_base64"));
+    let paged = call(
+        app,
+        "GET",
+        &format!("{path}&daily_offset=1&receipt_offset=1"),
+        Some(token),
+        None,
+    )
+    .await
+    .1;
+    assert_eq!(paged["totals"], report["totals"]);
+    assert_eq!(paged["daily"]["items"][0]["date"], "2024-02-29");
+    assert_eq!(paged["receipts"]["items"].as_array().unwrap().len(), 1);
+    let empty = call(
+        app,
+        "GET",
+        "/api/v1/reports/collections?from=2024-03-01&to=2024-03-01",
+        Some(token),
+        None,
+    )
+    .await
+    .1;
+    assert_eq!(empty["totals"]["total_paise"], 0);
+    assert_eq!(empty["totals"]["receipt_count"], 0);
+    assert_eq!(empty["receipts"]["items"], json!([]));
+    let history = call(app, "GET", "/api/v1/reports/collections", Some(token), None)
+        .await
+        .1;
+    assert_eq!(history["from"], "2024-02-28");
+    assert_eq!(history["daily"]["items"].as_array().unwrap().len(), 14);
+    let expected: i64 = sqlx::query_scalar(
+        "SELECT SUM(total_paise)::bigint FROM member_enrollments
+         WHERE received_at < (($1::date+1)::timestamp AT TIME ZONE 'Asia/Kolkata')",
+    )
+    .bind(replab_server::models::today())
+    .fetch_one(owner)
+    .await
+    .unwrap();
+    assert_eq!(history["highlights"]["all_time"]["total_paise"], expected);
+    assert_eq!(history["totals"]["total_paise"], expected);
+    for query in [
+        "from=2024-03-01&to=2024-02-28",
+        "from=not-a-date",
+        "from=1999-01-01",
+        "to=2999-01-01",
+        "daily_offset=-1",
+        "receipt_offset=1000001",
+        "unknown=1",
+    ] {
+        assert_eq!(
+            call(
+                app,
+                "GET",
+                &format!("/api/v1/reports/collections?{query}"),
+                Some(token),
+                None
+            )
+            .await
+            .0,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{query}"
+        );
+    }
 }
 
 async fn enrollment_contract(app: &Router, owner: &PgPool, runtime: &PgPool, token: &str) {

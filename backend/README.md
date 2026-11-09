@@ -11,15 +11,16 @@ initial-admin/configuration commands. Deploy the executable and operator files,
 not Rust source, Cargo, or the Flutter toolchain. Rust is required only to build.
 The executable is Linux ARM64 and dynamically uses standard Linux system
 libraries; build against an OS compatible with the Pi, not Windows.
-Current release: **0.5.0**, database **schema 4**.
+Current release: **0.6.0**, database **schema 4**. Reports are read-only;
+upgrading from 0.5.0 requires no new schema migration.
 
 ## Simple native installation / update
 
-Use **`build/replab-server_0.5.0-1_arm64.deb`** on Raspberry Pi OS **64-bit**
+Use **`build/replab-server_0.6.0-1_arm64.deb`** on Raspberry Pi OS **64-bit**
 (Bookworm or newer). Copy it to the Pi, then run just:
 
 ```sh
-sudo apt install ./replab-server_0.5.0-1_arm64.deb
+sudo apt install ./replab-server_0.6.0-1_arm64.deb
 ```
 
 The package installs required host dependencies, including PostgreSQL if needed;
@@ -43,7 +44,7 @@ does not change the administrator/password.
 Transfer from this workspace's `backend/` directory, using the working Pi name/IP:
 
 ```powershell
-scp build/replab-server_0.5.0-1_arm64.deb pi@lovin.local:~/
+scp build/replab-server_0.6.0-1_arm64.deb pi@lovin.local:~/
 ```
 
 A `.sha256` sidecar is available for independent transfer verification. Install
@@ -102,6 +103,10 @@ Update the tablet app alongside the schema-4 server before registering new membe
   archive/reactivate, monthly training/insurance rates, audited revision checks.
 - Server-calculated integer-paise totals, append-only numbered registration
   receipts and idempotent retries/lookup for uncertain responses.
+- Authenticated financial collections reports: today/yesterday/month/all-time,
+  inclusive IST date filters, Cash/UPI and plan/add-on splits, zero-filled daily
+  history, paginated receipts. These report staff-confirmed money collected,
+  not earned revenue/profit; expenses/refunds/unrecorded payments are excluded.
 - Atomic mutation + audit + commit **before** success response; restricted DB
   runtime role; credentials/inputs/SQL not included in request logs.
 - HTTPS, 16-KiB JSON body limit (128 KiB for plans, 3 MiB for photo enrollment),
@@ -127,16 +132,16 @@ connection settings remain configurable.
 
 ## Upgrade an existing v0.4.1 Pi to v0.5.0
 
-Use `build/replab-linux-arm64-v0.5.0.tar.gz` and its SHA-256 sidecar. Transfer both,
+Use `build/replab-linux-arm64-v0.6.0.tar.gz` and its SHA-256 sidecar. Transfer both,
 verify their digests, and extract into a **new** directory:
 
 ```sh
 cd ~
-sha256sum replab-linux-arm64-v0.5.0.tar.gz
-cat replab-linux-arm64-v0.5.0.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.6.0.tar.gz
+cat replab-linux-arm64-v0.6.0.tar.gz.sha256
 # Continue only if the digests match.
 mkdir ~/replab-release-v0.5.0
-tar -xzf replab-linux-arm64-v0.5.0.tar.gz -C ~/replab-release-v0.5.0
+tar -xzf replab-linux-arm64-v0.6.0.tar.gz -C ~/replab-release-v0.5.0
 cd ~/replab-release-v0.5.0
 ./replab-server --version
 ldd ./replab-server
@@ -382,7 +387,7 @@ rules in `pg_hba.conf`; do not add LAN-wide `trust` rules or expose port 5432.
 
 ## 2. Obtain the executable-only deployment package
 
-After a build here, `build/replab-linux-arm64-v0.5.0.tar.gz` contains:
+After a build here, `build/replab-linux-arm64-v0.6.0.tar.gz` contains:
 
 - `replab-server`
 - `deploy/replab.service`
@@ -396,7 +401,7 @@ From Windows PowerShell in `backend/`, replace the SSH user/hostname (or use
 the currently reachable IP just for transferring the package):
 
 ```powershell
-scp build/replab-linux-arm64-v0.5.0.tar.gz build/replab-linux-arm64-v0.5.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_HOST:~/
+scp build/replab-linux-arm64-v0.6.0.tar.gz build/replab-linux-arm64-v0.6.0.tar.gz.sha256 YOUR_PI_USER@YOUR_PI_HOST:~/
 ```
 
 On the Pi:
@@ -404,10 +409,10 @@ On the Pi:
 ```sh
 cd ~
 # The sidecar's recorded path may include build/; compare the digest explicitly:
-sha256sum replab-linux-arm64-v0.5.0.tar.gz
-cat replab-linux-arm64-v0.5.0.tar.gz.sha256
+sha256sum replab-linux-arm64-v0.6.0.tar.gz
+cat replab-linux-arm64-v0.6.0.tar.gz.sha256
 mkdir -p ~/replab-release
-tar -xzf replab-linux-arm64-v0.5.0.tar.gz -C ~/replab-release
+tar -xzf replab-linux-arm64-v0.6.0.tar.gz -C ~/replab-release
 cd ~/replab-release
 ./replab-server --version
 ldd ./replab-server
@@ -421,7 +426,7 @@ and the committed lockfile:
 
 ```sh
 cargo build --locked --release
-sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.5.0.tar.gz
+sh tools/package.sh target/release/replab-server build/replab-linux-arm64-v0.6.0.tar.gz
 ```
 
 Compilers/source may be on a build machine; they are not production prerequisites.
@@ -771,9 +776,9 @@ rustup target add aarch64-unknown-linux-gnu
 sudo apt install gcc-aarch64-linux-gnu
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
   cargo build --locked --release --target aarch64-unknown-linux-gnu
-sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.5.0.tar.gz
+sh tools/package.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-linux-arm64-v0.6.0.tar.gz
 # Preferred one-command Pi installer:
-sh tools/package-deb.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-server_0.5.0-1_arm64.deb
+sh tools/package-deb.sh target/aarch64-unknown-linux-gnu/release/replab-server build/replab-server_0.6.0-1_arm64.deb
 ```
 
 Installer lifecycle checks use actual `dpkg` unpack/configure/remove in a

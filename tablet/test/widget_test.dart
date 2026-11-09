@@ -135,7 +135,7 @@ void main() {
     api.clearSession();
   });
 
-  testWidgets('sidebar switches between all four section bodies', (
+  testWidgets('sidebar switches between all five section bodies', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
@@ -223,6 +223,7 @@ void main() {
     const sections = [
       ('Attendance', 'See who checked in and when.'),
       ('Members', 'Waiting for member connection'),
+      ('Reports', 'Track collections, payment history and plan performance.'),
       ('Settings', 'Manage gym preferences and device connection.'),
       ('Dashboard', 'Welcome to RepLab Fitness'),
     ];
@@ -366,7 +367,13 @@ void main() {
     );
     final navigation = find.byKey(const ValueKey('sidebar-navigation'));
     final buttonPositions = {
-      for (final title in ['Dashboard', 'Attendance', 'Members', 'Settings'])
+      for (final title in [
+        'Dashboard',
+        'Attendance',
+        'Members',
+        'Reports',
+        'Settings',
+      ])
         title: tester.getRect(find.byKey(ValueKey('nav-$title'))),
     };
 
@@ -427,7 +434,13 @@ void main() {
       final sidebar = find.byKey(const ValueKey('sidebar'));
       final navigationButton = find.byKey(const ValueKey('nav-Attendance'));
       final positions = {
-        for (final title in ['Dashboard', 'Attendance', 'Members', 'Settings'])
+        for (final title in [
+          'Dashboard',
+          'Attendance',
+          'Members',
+          'Reports',
+          'Settings',
+        ])
           title: tester.getRect(find.byKey(ValueKey('nav-$title'))),
       };
       expect(

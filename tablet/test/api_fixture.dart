@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/member_enrollment.dart';
 
+import 'reports_fixture.dart';
+
 Future<void> enterServerLogin(WidgetTester tester) async {
   if (find.byKey(const ValueKey('setup-next')).evaluate().isNotEmpty) {
     await tester.tap(find.text('Hostname'));
@@ -53,6 +55,8 @@ class ApiFixture {
   final members = <Map<String, dynamic>>[member(42)];
   final enrollments = <String, Map<String, dynamic>>{};
   Map<String, dynamic> catalog = EnrollmentOptions.previewData;
+  bool reportsAvailable = true;
+  Map<String, dynamic>? reportResponse;
   static Map<String, dynamic> member(int n) => {
     'id': '00000000-0000-0000-0000-${n.toString().padLeft(12, '0')}',
     'number': 'M-${n.toString().padLeft(4, '0')}',
@@ -151,6 +155,19 @@ class ApiFixture {
         };
       }
       return json(catalog);
+    }
+    if (path == '/api/v1/reports/collections') {
+      if (!reportsAvailable) return error('not_found', 'Route not found.', 404);
+      final query = request.url.queryParameters;
+      return json(
+        reportResponse ??
+            reportsFixture(
+              from: query['from'],
+              to: query['to'],
+              dailyOffset: int.parse(query['daily_offset'] ?? '0'),
+              receiptOffset: int.parse(query['receipt_offset'] ?? '0'),
+            ),
+      );
     }
     if (path == '/api/v1/members/enroll') {
       final key = body['request_id'] as String;
