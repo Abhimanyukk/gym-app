@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderSliver;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gym_management_app/dashboard_screen.dart';
 import 'package:gym_management_app/main.dart';
@@ -114,6 +115,76 @@ void main() {
     expect(find.text('Poovalli Induchoodan'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'member controls collapse into the list and return on reverse scroll',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(1600, 1000));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await openMembers(tester);
+      final list = find.byKey(const ValueKey('members-list'));
+      final controls = find.byKey(const ValueKey('members-controls'));
+      final sliver = find.byKey(
+        const ValueKey('members-controls-sliver'),
+        skipOffstage: false,
+      );
+      final search = find.byKey(const ValueKey('members-search'));
+      final filter = find.byKey(const ValueKey('members-filter-Active'));
+      await tester.enterText(search, 'Sample');
+      await tester.pumpAndSettle();
+      await tester.tap(filter);
+      await tester.pumpAndSettle();
+
+      final header = find.byKey(const ValueKey('members-header'));
+      final add = find.byKey(const ValueKey('members-add'));
+      final sidebar = find.byKey(const ValueKey('sidebar'));
+      final headerRect = tester.getRect(header);
+      final addRect = tester.getRect(add);
+      final sidebarRect = tester.getRect(sidebar);
+      final controlsHeight = tester.getSize(controls).height;
+      final scroll = tester.widget<CustomScrollView>(list).controller!;
+      double visibleControls() =>
+          tester.renderObject<RenderSliver>(sliver).geometry!.paintExtent;
+      expect(visibleControls(), closeTo(controlsHeight, .1));
+
+      await tester.drag(list, const Offset(0, -600));
+      await tester.pumpAndSettle();
+      expect(scroll.offset, greaterThan(controlsHeight));
+      expect(visibleControls(), 0);
+      expect(search.hitTestable(), findsNothing);
+      expect(filter.hitTestable(), findsNothing);
+      expect(tester.getRect(header), headerRect);
+      expect(tester.getRect(add), addRect);
+      expect(tester.getRect(sidebar), sidebarRect);
+      expect(
+        find.byKey(const ValueKey('pull-refresh-indicator')),
+        findsNothing,
+      );
+
+      final previousOffset = scroll.offset;
+      await tester.drag(list, const Offset(0, 60));
+      await tester.pumpAndSettle();
+      expect(scroll.offset, greaterThan(0));
+      expect(scroll.offset, lessThan(previousOffset));
+      expect(visibleControls(), closeTo(controlsHeight, .1));
+      expect(search.hitTestable(), findsOneWidget);
+      expect(tester.widget<TextField>(search).controller!.text, 'Sample');
+      expect(tester.widget<ChoiceChip>(filter).selected, isTrue);
+      expect(tester.getRect(header), headerRect);
+      expect(
+        find.byKey(const ValueKey('pull-refresh-indicator')),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('members-sort')));
+      await tester.pumpAndSettle();
+      expect(scroll.offset, 0);
+      expect(visibleControls(), closeTo(controlsHeight, .1));
+      expect(tester.widget<TextField>(search).controller!.text, 'Sample');
+      expect(tester.widget<ChoiceChip>(filter).selected, isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('add validates, assigns a number and survives sidebar changes', (
     tester,

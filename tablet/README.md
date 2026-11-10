@@ -24,6 +24,9 @@ Their unavailable states remain explicit; live sessions never load sample record
 Attendance refresh checks server readiness but does not claim to retrieve visits.
 Active/inactive member **record** filters are not subscription-status filters.
 Name sorting sorts the currently loaded page(s); Load more retrieves another 50.
+On Members, scrolling into the list hides the search, filters, count and sorting
+controls. Reverse scrolling brings them back without losing selections.
+The page title and Add member button stay fixed, and body-wide refresh is unchanged.
 
 Member names in the directory and profile use the saved registration photo.
 Backend **0.6.2** includes photos in the paginated directory response, avoiding
