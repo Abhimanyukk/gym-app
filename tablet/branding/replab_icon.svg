@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     width="1024" height="1024" viewBox="0 0 108 108">
+  <title>RepLab — red three-dimensional dumbbell at 45 degrees</title>
+  <defs>
+    <!-- Reuse the app's existing dumbbell silhouette, without changing UI icons. -->
+    <path id="dumbbell" d="M16.35 29.975C16.35 25.4617 20.0117 21.8 24.525 21.8C29.0383 21.8 32.7 25.4617 32.7 29.975V49.05H76.3V29.975C76.3 25.4617 79.9617 21.8 84.475 21.8C88.9883 21.8 92.65 25.4617 92.65 29.975V32.7H95.375C99.8883 32.7 103.55 36.3617 103.55 40.875V49.05C106.565 49.05 109 51.4855 109 54.5C109 57.5145 106.565 59.95 103.55 59.95V68.125C103.55 72.6383 99.8883 76.3 95.375 76.3H92.65V79.025C92.65 83.5383 88.9883 87.2 84.475 87.2C79.9617 87.2 76.3 83.5383 76.3 79.025V59.95H32.7V79.025C32.7 83.5383 29.0383 87.2 24.525 87.2C20.0117 87.2 16.35 83.5383 16.35 79.025V76.3H13.625C9.11172 76.3 5.45 72.6383 5.45 68.125V59.95C2.43547 59.95 0 57.5145 0 54.5C0 51.4855 2.43547 49.05 5.45 49.05V40.875C5.45 36.3617 9.11172 32.7 13.625 32.7H16.35V29.975Z"/>
+    <linearGradient id="depth" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#ba182b"/>
+      <stop offset=".45" stop-color="#730012"/>
+      <stop offset="1" stop-color="#320007"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2=".85" y2="1">
+      <stop stop-color="#ff9b91"/>
+      <stop offset=".2" stop-color="#ff4350"/>
+      <stop offset=".48" stop-color="#de142c"/>
+      <stop offset=".8" stop-color="#a40018"/>
+      <stop offset="1" stop-color="#4d000b"/>
+    </linearGradient>
+    <linearGradient id="plate" x1="0" y1="0" x2="1" y2=".15">
+      <stop stop-color="#850014"/>
+      <stop offset=".18" stop-color="#ff8b83"/>
+      <stop offset=".36" stop-color="#ff3d4b"/>
+      <stop offset=".62" stop-color="#e2132d"/>
+      <stop offset="1" stop-color="#78000f"/>
+    </linearGradient>
+    <linearGradient id="rounding" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ffd3c5" stop-opacity=".35"/>
+      <stop offset=".25" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset=".62" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#210004" stop-opacity=".6"/>
+    </linearGradient>
+    <linearGradient id="grip" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ff827d"/>
+      <stop offset=".22" stop-color="#ffb5a2"/>
+      <stop offset=".42" stop-color="#ff4c53"/>
+      <stop offset=".7" stop-color="#bd061f"/>
+      <stop offset="1" stop-color="#59000e"/>
+    </linearGradient>
+    <linearGradient id="bevel" x1="0" y1="0" x2=".5" y2="1">
+      <stop stop-color="#ffb4a1"/>
+      <stop offset=".35" stop-color="#ed3948"/>
+      <stop offset="1" stop-color="#60000d"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#ffd4c2" stop-opacity=".9"/>
+      <stop offset=".45" stop-color="#ff9290" stop-opacity=".5"/>
+      <stop offset="1" stop-color="#ff404b" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect id="background" width="108" height="108" fill="#FFFFFF"/>
+  <g transform="translate(54 52.5) rotate(-45) scale(.8) translate(-54.5 -54.5)">
+    <!-- Offset lower faces create depth; no SVG filters or bitmap effects. -->
+    <use xlink:href="#dumbbell" transform="translate(0 5)" fill="url(#depth)"/>
+    <use xlink:href="#dumbbell" transform="translate(0 2.5)" fill="#ae0920"/>
+    <use xlink:href="#dumbbell" fill="url(#red)"/>
+    <rect x="32.7" y="49.05" width="43.6" height="10.9" fill="url(#grip)"/>
+    <path d="M36 51.25H73" fill="none" stroke="#ffdbbf" stroke-opacity=".6" stroke-width=".8" stroke-linecap="round"/>
+    <rect x="5.45" y="32.7" width="10.9" height="43.6" rx="5.45" fill="url(#plate)"/>
+    <rect x="5.45" y="32.7" width="10.9" height="43.6" rx="5.45" fill="url(#rounding)"/>
+    <rect x="92.65" y="32.7" width="10.9" height="43.6" rx="5.45" fill="url(#plate)"/>
+    <rect x="92.65" y="32.7" width="10.9" height="43.6" rx="5.45" fill="url(#rounding)"/>
+    <rect x="16.35" y="21.8" width="16.35" height="65.4" rx="8.175" fill="url(#plate)" stroke="url(#bevel)" stroke-width=".8"/>
+    <rect x="16.35" y="21.8" width="16.35" height="65.4" rx="8.175" fill="url(#rounding)"/>
+    <rect x="76.3" y="21.8" width="16.35" height="65.4" rx="8.175" fill="url(#plate)" stroke="url(#bevel)" stroke-width=".8"/>
+    <rect x="76.3" y="21.8" width="16.35" height="65.4" rx="8.175" fill="url(#rounding)"/>
+    <path d="M24 25.2C20.7 25.2 19.3 27.9 19.3 31V77M84 25.2C80.65 25.2 79.25 27.9 79.25 31V77"
+          fill="none" stroke="url(#shine)" stroke-width="1.35" stroke-linecap="round"/>
+    <use xlink:href="#dumbbell" fill="none" stroke="url(#bevel)" stroke-width=".55"/>
+  </g>
+</svg>

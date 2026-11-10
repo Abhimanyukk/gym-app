@@ -339,6 +339,23 @@ mean a committed change: the form warns, blocks resubmission, and tells staff to
 check server records first. There are no automatic mutation retries/offline writes.
 Member numbering, admin limits, validations and authorization remain server rules.
 
+## App name and launcher artwork
+
+The display name is **RepLab** on Android and in the browser preview. The
+launcher uses a white background with a red-gradient, beveled dumbbell rotated
+45 degrees. The editable source and 1024px preview are in `branding/`.
+Sidebar and loading icons remain unchanged.
+
+To regenerate Android launcher icons (including adaptive icons), web icons
+and the favicon using the existing Flutter dependencies:
+
+```powershell
+docker exec -w /workspace/tablet gym-app-build flutter test --no-pub tools/generate_branding_icons.dart
+```
+
+The Android application ID is unchanged, so installing an update preserves
+existing device settings and sessions. No new package or runtime asset is needed.
+
 ## Checks
 
 ```powershell

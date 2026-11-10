@@ -5,7 +5,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:label="gym_management_app"
+        android:label="RepLab"
         android:name="${applicationName}"
         android:usesCleartextTraffic="false"
         android:allowBackup="false"

@@ -87,7 +87,7 @@ class _GymManagementAppState extends State<GymManagementApp>
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Gym Management',
+      title: 'RepLab',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigator,
       theme: ThemeData(
